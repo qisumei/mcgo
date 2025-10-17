@@ -28,7 +28,7 @@ public class GameEventsHandler {
      */
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
-        MatchManager.tick(event.getServer());
+        MatchManager.tick();
     }
 
     /**

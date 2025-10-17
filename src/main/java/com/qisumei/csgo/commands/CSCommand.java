@@ -127,7 +127,8 @@ public class CSCommand {
             )
             .then(Commands.literal("join")
                 .then(Commands.argument("name", StringArgumentType.string())
-                    .executes(context -> joinMatch(context))
+                   .executes(CSCommand::joinMatch)
+
                 )
             )
         );
@@ -188,9 +189,8 @@ public class CSCommand {
      *
      * @param context 命令上下文
      * @return 执行结果代码
-     * @throws CommandSyntaxException 如果命令语法错误
      */
-    private static int saveMatchPreset(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+    private static int saveMatchPreset(CommandContext<CommandSourceStack> context) {
         String matchName = StringArgumentType.getString(context, "name");
         String presetName = StringArgumentType.getString(context, "preset_name");
         CommandSourceStack source = context.getSource();
@@ -210,6 +210,8 @@ public class CSCommand {
         return 1;
     }
 
+
+
     /**
      * 列出所有已保存的比赛预设。
      *
@@ -218,16 +220,23 @@ public class CSCommand {
      */
     private static int listPresets(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
-        List<String> presets = PresetManager.listPresets(source.getServer());
-        if (presets.isEmpty()) {
-            source.sendSuccess(() -> Component.literal("当前没有已保存的比赛预设。"), false);
+        try {
+            List<String> presets = PresetManager.listPresets(source.getServer());
+            if (presets.isEmpty()) {
+                source.sendSuccess(() -> Component.literal("当前没有已保存的比赛预设。"), false);
+                return 1;
+            }
+            MutableComponent message = Component.literal("--- 已保存的预设列表 ---");
+            presets.forEach(name -> message.append("\n - ").append(Component.literal(name).withStyle(ChatFormatting.GREEN)));
+            source.sendSuccess(() -> message, false);
             return 1;
+        } catch (Exception e) {
+            QisCSGO.LOGGER.error("列出预设时发生错误: ", e);
+            source.sendFailure(Component.literal("错误：读取预设列表时出现异常，请查看日志。"));
+            return 0;
         }
-        MutableComponent message = Component.literal("--- 已保存的预设列表 ---");
-        presets.forEach(name -> message.append("\n - ").append(Component.literal(name).withStyle(ChatFormatting.GREEN)));
-        source.sendSuccess(() -> message, false);
-        return 1;
     }
+
 
     /**
      * 玩家加入比赛。
@@ -279,6 +288,7 @@ public class CSCommand {
      * @return 执行结果代码
      */
     private static int listMatches(CommandSourceStack source) {
+    try {
         var matches = MatchManager.getAllMatches();
         if (matches.isEmpty()) {
             source.sendSuccess(() -> Component.literal("当前没有正在准备或进行的比赛。"), false);
@@ -296,7 +306,13 @@ public class CSCommand {
         }
         source.sendSuccess(() -> message, false);
         return 1;
+    } catch (Exception e) {
+        QisCSGO.LOGGER.error("列出比赛时发生错误: ", e);
+        source.sendFailure(Component.literal("错误：读取比赛列表时出现异常，请查看日志。"));
+        return 0;
     }
+}
+
 
     /**
      * 开始比赛。
@@ -304,9 +320,8 @@ public class CSCommand {
      * @param context 命令上下文
      * @param force 是否强制开始
      * @return 执行结果代码
-     * @throws CommandSyntaxException 如果命令语法错误
      */
-    private static int beganMatch(CommandContext<CommandSourceStack> context, boolean force) throws CommandSyntaxException {
+    private static int beganMatch(CommandContext<CommandSourceStack> context, boolean force) {
         String matchName = StringArgumentType.getString(context, "name");
         Match match = MatchManager.getMatch(matchName);
         CommandSourceStack source = context.getSource();
@@ -413,9 +428,8 @@ public class CSCommand {
      *
      * @param context 命令上下文
      * @return 执行结果代码
-     * @throws CommandSyntaxException 如果命令语法错误
      */
-    private static int setNumRounds(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+    private static int setNumRounds(CommandContext<CommandSourceStack> context) {
         String matchName = StringArgumentType.getString(context, "name");
         Match match = MatchManager.getMatch(matchName);
         if (match == null) {
@@ -437,9 +451,8 @@ public class CSCommand {
      *
      * @param context 命令上下文
      * @return 执行结果代码
-     * @throws CommandSyntaxException 如果命令语法错误
      */
-    private static int setRoundTime(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+    private static int setRoundTime(CommandContext<CommandSourceStack> context) {
         String matchName = StringArgumentType.getString(context, "name");
         Match match = MatchManager.getMatch(matchName);
         if (match == null) {
@@ -569,9 +582,8 @@ public class CSCommand {
      *
      * @param context 命令上下文
      * @return 执行结果代码
-     * @throws CommandSyntaxException 如果命令语法错误
      */
-    private static int endMatch(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+    private static int endMatch(CommandContext<CommandSourceStack> context) {
         String matchName = StringArgumentType.getString(context, "name");
         Match match = MatchManager.getMatch(matchName);
         CommandSourceStack source = context.getSource();

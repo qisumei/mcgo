@@ -28,11 +28,12 @@ public class PresetManager {
      * @return 表示预设文件夹的File对象
      */
     private static File getPresetFolder(MinecraftServer server) {
-        // --- 修正 #1: 使用新的 getWorldPath 方法 ---
         Path path = server.getWorldPath(CSGO_PRESETS_FOLDER);
         File folder = path.toFile();
         if (!folder.exists()) {
-            folder.mkdirs();
+            if (!folder.mkdirs()) {
+                QisCSGO.LOGGER.warn("无法创建预设文件夹: {}", folder.getAbsolutePath());
+            }
         }
         return folder;
     }

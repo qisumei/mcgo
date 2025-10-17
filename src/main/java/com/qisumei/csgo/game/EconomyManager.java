@@ -1,8 +1,6 @@
 package com.qisumei.csgo.game;
 
 import com.qisumei.csgo.config.ServerConfig;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import com.qisumei.csgo.util.ItemNBTHelper;
@@ -22,9 +20,7 @@ public class EconomyManager {
         if (amount <= 0) return;
         // --- 修改: minecraft:emerald -> minecraft:diamond ---
         String command = "give " + player.getName().getString() + " minecraft:diamond " + amount;
-        if (player.server != null) {
-            player.server.getCommands().performPrefixedCommand(player.server.createCommandSourceStack(), command);
-        }
+        player.server.getCommands().performPrefixedCommand(player.server.createCommandSourceStack(), command);
     }
 
     /**

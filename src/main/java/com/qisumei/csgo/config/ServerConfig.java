@@ -115,7 +115,7 @@ public class ServerConfig {
     public static int killRewardHeavy;
 
     /**
-     * 使用步枪击杀敌人所获得的金钱奖励。
+     * 使用枪击杀敌人所获得的金钱奖励。
      */
     public static int killRewardRifle;
 

@@ -42,7 +42,8 @@ public class C4Item extends Item {
      * @return 使用动画类型（BLOCK）
      */
     @Override
-    public UseAnim getUseAnimation(ItemStack stack) {
+    @javax.annotation.Nonnull
+    public UseAnim getUseAnimation(@javax.annotation.Nonnull ItemStack stack) {
         return UseAnim.BLOCK;
     }
 
@@ -56,7 +57,8 @@ public class C4Item extends Item {
      * @return 操作结果，包含使用的物品堆栈
      */
     @Override
-    public InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand hand) {
+    @javax.annotation.Nonnull
+    public InteractionResultHolder<ItemStack> use(@javax.annotation.Nonnull Level world, @javax.annotation.Nonnull Player player,@javax.annotation.Nonnull InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
 
         // --- 修正 #1: 检查 player 是否为 ServerPlayer ---
@@ -99,7 +101,7 @@ public class C4Item extends Item {
      * @param remainingUseTicks 剩余使用时间（tick）
      */
     @Override
-    public void onUseTick(Level world, LivingEntity user, ItemStack stack, int remainingUseTicks) {
+    public void onUseTick(@javax.annotation.Nonnull Level world,@javax.annotation.Nonnull LivingEntity user,@javax.annotation.Nonnull ItemStack stack, int remainingUseTicks) {
         if (!(user instanceof ServerPlayer player) || world.isClientSide()) return;
 
         if (remainingUseTicks == 1) {
@@ -135,7 +137,7 @@ public class C4Item extends Item {
      * @return 使用持续时间（单位：tick）
      */
     @Override
-    public int getUseDuration(ItemStack stack, LivingEntity user) {
+    public int getUseDuration(@javax.annotation.Nonnull ItemStack stack,@javax.annotation.Nonnull LivingEntity user) {
         return USE_DURATION;
     }
 }

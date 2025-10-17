@@ -103,12 +103,4 @@ public class C4CountdownHandler {
         return Math.max(15, (int)(40 * (1 - progress * 0.7f)));
     }
 
-    /**
-     * 判断当前C4倒计时是否处于激活状态。
-     *
-     * @return 如果处于激活状态返回true，否则返回false
-     */
-    public boolean isActive() {
-        return this.isActive;
-    }
 }

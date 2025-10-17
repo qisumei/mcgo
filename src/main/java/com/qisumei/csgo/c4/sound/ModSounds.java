@@ -5,7 +5,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 /**
@@ -19,35 +18,6 @@ public class ModSounds {
         DeferredRegister.create(BuiltInRegistries.SOUND_EVENT, QisCSGO.MODID);
 
     // 使用 fromNamespaceAndPath 创建 ResourceLocation
-    /**
-     * 注册名为"tw"的音效事件。
-     * 该音效用于表示某种游戏内事件（如炸弹爆炸倒计时）。
-     */
-    public static final DeferredHolder<SoundEvent, SoundEvent> TW_SOUND =
-        SOUND_EVENTS.register("tw",
-            () -> SoundEvent.createVariableRangeEvent(
-                ResourceLocation.fromNamespaceAndPath(QisCSGO.MODID, "tw")
-            ));
-
-    /**
-     * 注册名为"ctw"的音效事件。
-     * 该音效可能用于反恐精英相关事件提示。
-     */
-    public static final DeferredHolder<SoundEvent, SoundEvent> CTW_SOUND =
-        SOUND_EVENTS.register("ctw",
-            () -> SoundEvent.createVariableRangeEvent(
-                ResourceLocation.fromNamespaceAndPath(QisCSGO.MODID, "ctw")
-            ));
-
-    /**
-     * 注册名为"c4_place"的音效事件。
-     * 该音效在C4炸弹放置时播放。
-     */
-    public static final DeferredHolder<SoundEvent, SoundEvent> C4_PLACE =
-        SOUND_EVENTS.register("c4_place",
-            () -> SoundEvent.createVariableRangeEvent(
-                ResourceLocation.fromNamespaceAndPath(QisCSGO.MODID, "c4_place")
-            ));
 
     // 原版音效引用也使用新方法
     /**

@@ -19,18 +19,13 @@ public class MatchManager {
 
     /**
      * 每个游戏刻调用一次，用于更新所有正在进行中的比赛状态。
-     *
-     * @param server 当前的Minecraft服务器实例
      */
-    public static void tick(MinecraftServer server) {
+    public static void tick() {
         // 创建一个副本以避免在迭代过程中修改集合
         for (Match match : new ArrayList<>(ACTIVE_MATCHES.values())) {
             if (match.getState() == Match.MatchState.IN_PROGRESS) {
                 // --- 修正 #1: match.tick() 不再需要 server 参数 ---
                 match.tick();
-            }
-            if (match.getState() == Match.MatchState.FINISHED) {
-                // TODO: Maybe add a delay before removing finished matches
             }
         }
     }

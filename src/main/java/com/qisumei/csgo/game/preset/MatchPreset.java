@@ -3,7 +3,6 @@ package com.qisumei.csgo.game.preset;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.NbtUtils; // 写入时仍然可以用，因为它很稳定
 import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
