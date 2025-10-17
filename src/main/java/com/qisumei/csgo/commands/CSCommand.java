@@ -27,8 +27,17 @@ import net.minecraft.world.phys.AABB;
 import java.util.List;
 import java.util.Random;
 
+/**
+ * CSCommand 类用于注册和处理与CSGO比赛相关的命令。
+ * 包括创建比赛、设置比赛参数、加入比赛、开始比赛、结束比赛等操作。
+ */
 public class CSCommand {
 
+    /**
+     * 注册所有与CSGO相关的命令。
+     *
+     * @param dispatcher 命令调度器，用于注册命令
+     */
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("cs")
             // --- 管理员指令 ---
@@ -124,9 +133,18 @@ public class CSCommand {
         );
     }
 
+    /**
+     * 创建一个新的比赛。
+     *
+     * @param context 命令上下文
+     * @param name 比赛名称
+     * @param maxPlayers 最大玩家数量
+     * @param presetName 预设名称（可选）
+     * @return 执行结果代码
+     */
     private static int createMatch(CommandContext<CommandSourceStack> context, String name, int maxPlayers, String presetName) {
         CommandSourceStack source = context.getSource();
-        
+
         if (MatchManager.getMatch(name) != null) {
             source.sendFailure(Component.literal("错误：同名比赛 '" + name + "' 已存在！"));
             return 0;
@@ -151,7 +169,7 @@ public class CSCommand {
         } else {
             source.sendSuccess(() -> Component.literal("比赛 '" + name + "' 已创建！最大人数: " + maxPlayers), true);
         }
-        
+
         executeServerCommand(source, "team add " + match.getCtTeamName() + " '{\"text\":\"Counter-Terrorists\"}'");
         executeServerCommand(source, "team modify " + match.getCtTeamName() + " color blue");
         executeServerCommand(source, "team modify " + match.getCtTeamName() + " friendlyFire " + ServerConfig.friendlyFireEnabled);
@@ -165,6 +183,13 @@ public class CSCommand {
         return 1;
     }
 
+    /**
+     * 将当前比赛保存为预设。
+     *
+     * @param context 命令上下文
+     * @return 执行结果代码
+     * @throws CommandSyntaxException 如果命令语法错误
+     */
     private static int saveMatchPreset(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String matchName = StringArgumentType.getString(context, "name");
         String presetName = StringArgumentType.getString(context, "preset_name");
@@ -185,6 +210,12 @@ public class CSCommand {
         return 1;
     }
 
+    /**
+     * 列出所有已保存的比赛预设。
+     *
+     * @param context 命令上下文
+     * @return 执行结果代码
+     */
     private static int listPresets(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
         List<String> presets = PresetManager.listPresets(source.getServer());
@@ -197,7 +228,14 @@ public class CSCommand {
         source.sendSuccess(() -> message, false);
         return 1;
     }
-    
+
+    /**
+     * 玩家加入比赛。
+     *
+     * @param context 命令上下文
+     * @return 执行结果代码
+     * @throws CommandSyntaxException 如果命令语法错误
+     */
     private static int joinMatch(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = context.getSource().getPlayerOrException();
         String matchName = StringArgumentType.getString(context, "name");
@@ -234,6 +272,12 @@ public class CSCommand {
         return 1;
     }
 
+    /**
+     * 列出所有比赛。
+     *
+     * @param source 命令源
+     * @return 执行结果代码
+     */
     private static int listMatches(CommandSourceStack source) {
         var matches = MatchManager.getAllMatches();
         if (matches.isEmpty()) {
@@ -254,6 +298,14 @@ public class CSCommand {
         return 1;
     }
 
+    /**
+     * 开始比赛。
+     *
+     * @param context 命令上下文
+     * @param force 是否强制开始
+     * @return 执行结果代码
+     * @throws CommandSyntaxException 如果命令语法错误
+     */
     private static int beganMatch(CommandContext<CommandSourceStack> context, boolean force) throws CommandSyntaxException {
         String matchName = StringArgumentType.getString(context, "name");
         Match match = MatchManager.getMatch(matchName);
@@ -280,7 +332,7 @@ public class CSCommand {
                 return 0;
             }
         }
-        
+
         try {
             match.start();
             Component startMessage = Component.literal("比赛 '").append(Component.literal(matchName).withStyle(ChatFormatting.YELLOW)).append("' 已由管理员正式开始！");
@@ -294,10 +346,23 @@ public class CSCommand {
         return 1;
     }
 
+    /**
+     * 发送强制开始比赛的提示信息。
+     *
+     * @param source 命令源
+     * @param matchName 比赛名称
+     */
     private static void sendForceStartMessage(CommandSourceStack source, String matchName) {
         source.sendSystemMessage(Component.literal("如果仍要强制开始，请使用 ").append(Component.literal("/cs began " + matchName + " yes").withStyle(ChatFormatting.AQUA)));
     }
 
+    /**
+     * 将玩家踢出比赛。
+     *
+     * @param context 命令上下文
+     * @return 执行结果代码
+     * @throws CommandSyntaxException 如果命令语法错误
+     */
     private static int kickPlayer(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         CommandSourceStack source = context.getSource();
         String matchName = StringArgumentType.getString(context, "name");
@@ -318,6 +383,14 @@ public class CSCommand {
         return 1;
     }
 
+    /**
+     * 设置比赛的出生点。
+     *
+     * @param context 命令上下文
+     * @param team 队伍名称（CT 或 T）
+     * @return 执行结果代码
+     * @throws CommandSyntaxException 如果命令语法错误
+     */
     private static int setSpawnpoint(CommandContext<CommandSourceStack> context, String team) throws CommandSyntaxException {
         String matchName = StringArgumentType.getString(context, "name");
         Match match = MatchManager.getMatch(matchName);
@@ -335,6 +408,13 @@ public class CSCommand {
         return 1;
     }
 
+    /**
+     * 设置比赛的总回合数。
+     *
+     * @param context 命令上下文
+     * @return 执行结果代码
+     * @throws CommandSyntaxException 如果命令语法错误
+     */
     private static int setNumRounds(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String matchName = StringArgumentType.getString(context, "name");
         Match match = MatchManager.getMatch(matchName);
@@ -352,6 +432,13 @@ public class CSCommand {
         return 1;
     }
 
+    /**
+     * 设置比赛的回合时间。
+     *
+     * @param context 命令上下文
+     * @return 执行结果代码
+     * @throws CommandSyntaxException 如果命令语法错误
+     */
     private static int setRoundTime(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String matchName = StringArgumentType.getString(context, "name");
         Match match = MatchManager.getMatch(matchName);
@@ -365,6 +452,14 @@ public class CSCommand {
         return 1;
     }
 
+    /**
+     * 设置比赛的商店位置。
+     *
+     * @param context 命令上下文
+     * @param team 队伍名称（CT 或 T）
+     * @return 执行结果代码
+     * @throws CommandSyntaxException 如果命令语法错误
+     */
     private static int setShopPos(CommandContext<CommandSourceStack> context, String team) throws CommandSyntaxException {
         String matchName = StringArgumentType.getString(context, "name");
         Match match = MatchManager.getMatch(matchName);
@@ -382,6 +477,14 @@ public class CSCommand {
         return 1;
     }
 
+    /**
+     * 设置初始装备。
+     *
+     * @param context 命令上下文
+     * @param team 队伍名称（CT 或 T）
+     * @return 执行结果代码
+     * @throws CommandSyntaxException 如果命令语法错误
+     */
     private static int setInitialGear(CommandContext<CommandSourceStack> context, String team) throws CommandSyntaxException {
         ServerPlayer player = context.getSource().getPlayerOrException();
         ItemStack heldItem = player.getMainHandItem();
@@ -417,6 +520,14 @@ public class CSCommand {
         return 1;
     }
 
+    /**
+     * 设置包点区域。
+     *
+     * @param context 命令上下文
+     * @param site 包点名称（A 或 B）
+     * @return 执行结果代码
+     * @throws CommandSyntaxException 如果命令语法错误
+     */
     private static int setBombsite(CommandContext<CommandSourceStack> context, String site) throws CommandSyntaxException {
         String matchName = StringArgumentType.getString(context, "name");
         Match match = MatchManager.getMatch(matchName);
@@ -427,7 +538,7 @@ public class CSCommand {
 
         BlockPos from = BlockPosArgument.getLoadedBlockPos(context, "from");
         BlockPos to = BlockPosArgument.getLoadedBlockPos(context, "to");
-        
+
         AABB area = new AABB(
             Math.min(from.getX(), to.getX()), Math.min(from.getY(), to.getY()), Math.min(from.getZ(), to.getZ()),
             Math.max(from.getX(), to.getX()) + 1, Math.max(from.getY(), to.getY()) + 1, Math.max(from.getZ(), to.getZ()) + 1
@@ -443,10 +554,23 @@ public class CSCommand {
         return 1;
     }
 
+    /**
+     * 执行服务器命令。
+     *
+     * @param source 命令源
+     * @param command 要执行的命令
+     */
     private static void executeServerCommand(CommandSourceStack source, String command) {
         source.getServer().getCommands().performPrefixedCommand(source.getServer().createCommandSourceStack(), command);
     }
-    
+
+    /**
+     * 强制结束比赛。
+     *
+     * @param context 命令上下文
+     * @return 执行结果代码
+     * @throws CommandSyntaxException 如果命令语法错误
+     */
     private static int endMatch(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String matchName = StringArgumentType.getString(context, "name");
         Match match = MatchManager.getMatch(matchName);
@@ -459,10 +583,10 @@ public class CSCommand {
 
         match.forceEnd();
         MatchManager.removeMatch(matchName);
-        
+
         executeServerCommand(source, "team remove " + match.getCtTeamName());
         executeServerCommand(source, "team remove " + match.getTTeamName());
-        
+
         source.sendSuccess(() -> Component.literal("已强制结束并清理了比赛 '" + matchName + "'。"), true);
         return 1;
     }

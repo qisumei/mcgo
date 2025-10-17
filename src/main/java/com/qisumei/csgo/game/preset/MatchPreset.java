@@ -9,17 +9,48 @@ import net.minecraft.world.phys.AABB;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * MatchPreset 类用于存储一场CSGO比赛的预设配置信息。
+ * 包括反恐精英（CT）和恐怖分子（T）的出生点、商店位置、炸弹安放区范围、总回合数和每回合时间等。
+ */
 public class MatchPreset {
 
+    /** 反恐精英（CT）的出生点列表 */
     public final List<BlockPos> ctSpawns;
+
+    /** 恐怖分子（T）的出生点列表 */
     public final List<BlockPos> tSpawns;
+
+    /** 反恐精英（CT）的商店位置 */
     public final BlockPos ctShopPos;
+
+    /** 恐怖分子（T）的商店位置 */
     public final BlockPos tShopPos;
+
+    /** A炸弹区的边界框 */
     public final AABB bombsiteA;
+
+    /** B炸弹区的边界框 */
     public final AABB bombsiteB;
+
+    /** 总回合数 */
     public final int totalRounds;
+
+    /** 每个回合的时间（秒） */
     public final int roundTimeSeconds;
 
+    /**
+     * 构造一个 MatchPreset 实例。
+     *
+     * @param ctSpawns         反恐精英（CT）的出生点列表
+     * @param tSpawns          恐怖分子（T）的出生点列表
+     * @param ctShopPos        反恐精英（CT）的商店位置
+     * @param tShopPos         恐怖分子（T）的商店位置
+     * @param bombsiteA        A炸弹区的边界框
+     * @param bombsiteB        B炸弹区的边界框
+     * @param totalRounds      总回合数
+     * @param roundTimeSeconds 每个回合的时间（秒）
+     */
     public MatchPreset(List<BlockPos> ctSpawns, List<BlockPos> tSpawns, BlockPos ctShopPos, BlockPos tShopPos, AABB bombsiteA, AABB bombsiteB, int totalRounds, int roundTimeSeconds) {
         this.ctSpawns = ctSpawns;
         this.tSpawns = tSpawns;
@@ -31,9 +62,14 @@ public class MatchPreset {
         this.roundTimeSeconds = roundTimeSeconds;
     }
 
+    /**
+     * 将当前 MatchPreset 对象序列化为 NBT 标签。
+     *
+     * @return 序列化后的 CompoundTag 对象
+     */
     public CompoundTag toNbt() {
         CompoundTag tag = new CompoundTag();
-        
+
         // --- 使用手动方式写入 BlockPos 列表 ---
         ListTag ctSpawnsTag = new ListTag();
         for (BlockPos pos : ctSpawns) {
@@ -94,6 +130,12 @@ public class MatchPreset {
         return tag;
     }
 
+    /**
+     * 从 NBT 标签反序列化为 MatchPreset 对象。
+     *
+     * @param tag 包含 MatchPreset 数据的 CompoundTag
+     * @return 反序列化后的 MatchPreset 实例
+     */
     public static MatchPreset fromNbt(CompoundTag tag) {
         List<BlockPos> ctSpawns = new ArrayList<>();
         // --- 使用手动方式读取 BlockPos 列表 ---
@@ -130,7 +172,7 @@ public class MatchPreset {
              aabbB = new AABB(tag.getDouble("bombsiteB_minX"), tag.getDouble("bombsiteB_minY"), tag.getDouble("bombsiteB_minZ"),
                               tag.getDouble("bombsiteB_maxX"), tag.getDouble("bombsiteB_maxY"), tag.getDouble("bombsiteB_maxZ"));
         }
-        
+
         int rounds = tag.getInt("totalRounds");
         int time = tag.getInt("roundTimeSeconds");
 

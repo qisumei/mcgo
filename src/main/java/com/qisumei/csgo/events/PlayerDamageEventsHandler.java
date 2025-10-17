@@ -9,9 +9,19 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
 
+/**
+ * 玩家伤害事件处理器
+ * 处理玩家之间的攻击事件，主要用来控制友军伤害功能
+ */
 @EventBusSubscriber
 public class PlayerDamageEventsHandler {
 
+    /**
+     * 当玩家攻击实体时触发的事件处理方法
+     * 该方法主要用于检查是否应该取消友军伤害
+     *
+     * @param event 攻击实体事件对象，包含攻击者和被攻击目标的信息
+     */
     @SubscribeEvent
     public static void onPlayerAttack(AttackEntityEvent event) {
         // 如果禁用了友伤
