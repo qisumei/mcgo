@@ -1,0 +1,28 @@
+{
+    "tw": {
+      "sounds": [{
+        "name": "qiscsgo:tw",
+        "volume": 1.0,
+        "pitch": 1.0
+      }],
+      "subtitle": "subtitles.qiscsgo.tw"
+    },
+        "ctw": {
+          "sounds": [{
+            "name": "qiscsgo:ctw",
+            "volume": 1.0,
+            "pitch": 1.0
+          }],
+          "subtitle": "subtitles.qiscsgo.ctw"
+          },
+          
+            "c4_place": {
+              "sounds": [{
+                "name": "qiscsgo:c4_place",
+                "volume": 1.0,
+                "pitch": 1.0
+              }],
+              "subtitle": "subtitles.qiscsgo.c4_place"
+            }
+          
+}

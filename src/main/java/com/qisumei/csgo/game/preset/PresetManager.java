@@ -1,0 +1,66 @@
+package com.qisumei.csgo.game.preset;
+
+import com.qisumei.csgo.QisCSGO;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.storage.LevelResource;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
+public class PresetManager {
+
+    // --- 新增：定义一个用于存放预设的自定义资源路径 ---
+    public static final LevelResource CSGO_PRESETS_FOLDER = new LevelResource("csgo_presets");
+
+    private static File getPresetFolder(MinecraftServer server) {
+        // --- 修正 #1: 使用新的 getWorldPath 方法 ---
+        Path path = server.getWorldPath(CSGO_PRESETS_FOLDER);
+        File folder = path.toFile();
+        if (!folder.exists()) {
+            folder.mkdirs();
+        }
+        return folder;
+    }
+
+    public static boolean savePreset(MatchPreset preset, String name, MinecraftServer server) {
+        File presetFile = new File(getPresetFolder(server), name + ".dat");
+        try {
+            NbtIo.writeCompressed(preset.toNbt(), presetFile.toPath());
+            return true;
+        } catch (IOException e) {
+            QisCSGO.LOGGER.error("无法保存比赛预设 '{}': {}", name, e.getMessage());
+            return false;
+        }
+    }
+
+    public static MatchPreset loadPreset(String name, MinecraftServer server) {
+        File presetFile = new File(getPresetFolder(server), name + ".dat");
+        if (!presetFile.exists()) {
+            return null;
+        }
+        try {
+            // --- 修正 #2: 调用 readCompressed 时添加 NbtAccounter.unlimitedHeap() ---
+            CompoundTag tag = NbtIo.readCompressed(presetFile.toPath(), NbtAccounter.unlimitedHeap());
+            return MatchPreset.fromNbt(tag);
+        } catch (IOException e) {
+            QisCSGO.LOGGER.error("无法加载比赛预设 '{}': {}", name, e.getMessage());
+            return null;
+        }
+    }
+
+    public static List<String> listPresets(MinecraftServer server) {
+        File[] files = getPresetFolder(server).listFiles((dir, name) -> name.endsWith(".dat"));
+        if (files == null) return new ArrayList<>();
+        List<String> presetNames = new ArrayList<>();
+        for (File file : files) {
+            presetNames.add(file.getName().replace(".dat", ""));
+        }
+        return presetNames;
+    }
+}
