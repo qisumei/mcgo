@@ -1,5 +1,9 @@
 package com.qisumei.csgo.game;
 
+/**
+ * 商店管理器类，用于生成带有特定商品交易列表的村民实体 NBT 数据。
+ * 提供了获取 CT 和 T 阵营商店村民的方法，并支持动态添加药水效果。
+ */
 public class ShopManager {
 
     // CT阵营村民（Counter-Terrorist）
@@ -30,17 +34,36 @@ public class ShopManager {
 + "{buy:{id:\"minecraft:diamond\",count:52b},sell:{id:\"create:cardboard_package_10x12\",count:1b,components:{\"create:package_address\":\"\",\"create:package_contents\":[{item:{components:{\"geckolib:stack_animatable_id\":53L,\"pointblank:custom_tag\":{aim:0b,ammo:100,ammox:{},fmid:[I;-1035269231,-1050988176,-1692405250,-822147727],lid:-7568618470194677918L,mid:-3365118316045254505L,sa:{scope:\"/\"},seed:3588360488820813235L},\"pointblank:ts\":1759544394579L},count:1,id:\"pointblank:m249\"},slot:0},{item:{count:64,id:\"pointblank:ammo556\"},slot:1}]}}},"
 + "{buy:{id:\"minecraft:diamond\",count:3b},sell:{id:\"pointblank:grenade\",count:1b}}]}}";
 
-private static String addEffectsToNbt(String baseNbt, int duration) {
+    /**
+     * 向基础NBT字符串中注入指定持续时间的抗性提升效果。
+     *
+     * @param baseNbt 原始的村民NBT数据字符串
+     * @param duration 药水效果的持续时间（单位：tick）
+     * @return 添加了抗性提升效果后的完整NBT字符串
+     */
+    private static String addEffectsToNbt(String baseNbt, int duration) {
         // 抗性提升 (id:11), 4级=V, 免疫伤害
         String effectsNbt = "ActiveEffects:[{Id:11,Amplifier:4b,Duration:" + duration + "}]";
         // 将效果插入到NBT的第一个 '{' 之后
         return "{" + effectsNbt + "," + baseNbt.substring(1);
     }
 
+    /**
+     * 获取带有指定持续时间抗性效果的CT阵营商店村民NBT数据。
+     *
+     * @param duration 效果持续时间（单位：tick）
+     * @return 完整的CT阵营村民NBT字符串
+     */
     public static String getCtVillagerNbt(int duration) {
         return addEffectsToNbt(CT_VILLAGER_NBT, duration);
     }
 
+    /**
+     * 获取带有指定持续时间抗性效果的T阵营商店村民NBT数据。
+     *
+     * @param duration 效果持续时间（单位：tick）
+     * @return 完整的T阵营村民NBT字符串
+     */
     public static String getTVillagerNbt(int duration) {
         return addEffectsToNbt(T_VILLAGER_NBT, duration);
     }
