@@ -13,14 +13,12 @@ public class ServerConfig {
     public static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
     public static final ModConfigSpec SPEC;
 
-    // --- 新增配置项 ---
+    // --- 配置项定义 ---
     public static final ModConfigSpec.IntValue PISTOL_ROUND_STARTING_MONEY_SPEC;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> CT_PISTOL_ROUND_GEAR_SPEC;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> T_PISTOL_ROUND_GEAR_SPEC;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> INVENTORY_PROTECTED_ITEMS_SPEC;
     public static final ModConfigSpec.BooleanValue FRIENDLY_FIRE_ENABLED_SPEC;
-
-    // --- 原有配置项 ---
     public static final ModConfigSpec.IntValue BUY_PHASE_SECONDS_SPEC;
     public static final ModConfigSpec.IntValue ROUND_END_SECONDS_SPEC;
     public static final ModConfigSpec.IntValue WIN_REWARD_SPEC;
@@ -42,7 +40,8 @@ public class ServerConfig {
     public static final ModConfigSpec.ConfigValue<List<? extends String>> WEAPONS_AWP_SPEC;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> WEAPONS_GRENADE_SPEC;
 
-    // --- 新增静态变量 ---
+    // --- 静态变量，用于在游戏中直接访问配置值 ---
+
     /**
      * 手枪局或换边后的起始金钱数量。
      */
@@ -63,7 +62,11 @@ public class ServerConfig {
      */
     public static List<String> inventoryProtectedItems;
 
-    // --- 原有静态变量 ---
+    /**
+     * 是否启用友军伤害功能。
+     */
+    public static boolean friendlyFireEnabled;
+
     /**
      * 购买阶段持续的时间（单位：秒）。
      */
@@ -115,7 +118,7 @@ public class ServerConfig {
     public static int killRewardHeavy;
 
     /**
-     * 使用枪击杀敌人所获得的金钱奖励。
+     * 使用步枪击杀敌人所获得的金钱奖励。
      */
     public static int killRewardRifle;
 
@@ -164,10 +167,6 @@ public class ServerConfig {
      */
     public static List<String> weaponsGrenade;
 
-    /**
-     * 是否启用友军伤害功能。
-     */
-    public static boolean friendlyFireEnabled;
 
     static {
         // 定义游戏规则相关配置项
@@ -252,3 +251,4 @@ public class ServerConfig {
         weaponsGrenade = (List<String>) WEAPONS_GRENADE_SPEC.get();
     }
 }
+

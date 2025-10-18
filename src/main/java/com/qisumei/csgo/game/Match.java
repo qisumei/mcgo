@@ -390,7 +390,7 @@ public class Match {
             .filter(e -> "T".equals(e.getValue().getTeam()))
             .map(e -> server.getPlayerList().getPlayer(e.getKey()))
             .filter(Objects::nonNull)
-            .toList(); // 使用 collect(Collectors.toList()) 保证兼容性
+            .toList(); 
 
         if (!tPlayers.isEmpty()) {
             ServerPlayer c4Carrier = tPlayers.get(new Random().nextInt(tPlayers.size()));
@@ -857,7 +857,7 @@ public class Match {
         double minX = allPositions.getFirst().getX();
         double minY = allPositions.getFirst().getY();
         double minZ = allPositions.getFirst().getZ();
-
+        
         double maxX = minX;
         double maxY = minY;
         double maxZ = minZ;
