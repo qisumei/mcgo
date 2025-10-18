@@ -102,6 +102,12 @@ public class GameEventsHandler {
                     }
                 }
             }
+            // --- 新增逻辑三：处理C4拆除 ---
+            // 如果C4已经被安放，并且当前tick的玩家是CT
+            if (match.isC4Planted() && "CT".equals(stats.getTeam())) {
+                // 调用Match类中的拆弹处理逻辑
+                match.handlePlayerDefuseTick(player);
+            }
         }
     }
 

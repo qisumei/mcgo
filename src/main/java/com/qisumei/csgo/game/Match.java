@@ -17,12 +17,16 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.scores.DisplaySlot;
 import net.minecraft.world.scores.Objective;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
+import net.minecraft.world.item.Items;
 
 import java.util.*;
 
@@ -33,6 +37,11 @@ public class Match {
 
     public enum MatchState { PREPARING, IN_PROGRESS, FINISHED }
     public enum RoundState { BUY_PHASE, IN_PROGRESS, ROUND_END, PAUSED }
+
+    // --- 新增：拆弹相关 ---
+    private static final int DEFUSE_TIME_TICKS = 6 * 20; // 空手拆弹需要6秒 (120 ticks)
+    private static final int DEFUSE_TIME_WITH_KIT_TICKS = 3 * 20; // 使用拆弹器需要3秒 (60 ticks)
+    private final Map<UUID, Integer> defusingPlayers = new HashMap<>(); // 追踪拆弹进度
 
     // --- 比赛基础信息 ---
     private final String name;
@@ -193,7 +202,7 @@ public class Match {
         
         // 在发放金钱后，生成商店村民
         spawnShops();
-        
+
         // 7. 为所有玩家添加购买阶段的无敌和减速效果
         int resistanceDuration = ServerConfig.buyPhaseSeconds * 20;
         for (UUID playerUUID : playerStats.keySet()) {
@@ -737,6 +746,8 @@ public class Match {
      * 当C4被拆除时调用。
      */
     public void onC4Defused() {
+        // 新增：移除所有正在拆弹的玩家记录
+        defusingPlayers.clear();
         endRound("CT", "炸弹已被拆除");
     }
 
@@ -757,6 +768,7 @@ public class Match {
         if (c4Planted && c4Pos != null) {
             server.overworld().removeBlock(c4Pos, false);
         }
+        defusingPlayers.clear();
         c4CountdownHandler.stop();
         this.c4Planted = false;
         this.c4Pos = null;
@@ -1090,6 +1102,118 @@ public class Match {
             String command = "attribute " + player.getName().getString() + " minecraft:generic.knockback_resistance base set " + amount;
             
             server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
+        }
+    }
+    /**
+     * [核心修改] 新增方法，处理玩家每一tick的拆弹逻辑。
+     * 由 GameEventsHandler 调用。
+     * @param player 正在被检测的玩家。
+     */
+    public void handlePlayerDefuseTick(ServerPlayer player) {
+        // 检查玩家是否满足拆弹的基本条件
+        boolean canDefuse = isPlayerEligibleToDefuse(player);
+
+        if (canDefuse) {
+            // --- 如果满足条件，则推进拆弹进度 ---
+            int currentProgress = defusingPlayers.getOrDefault(player.getUUID(), 0);
+            currentProgress++;
+            defusingPlayers.put(player.getUUID(), currentProgress);
+
+            // 决定拆弹总时长（是否有拆弹器）
+            boolean hasKit = player.getMainHandItem().is(Items.SHEARS) || player.getOffhandItem().is(Items.SHEARS);
+            int totalDefuseTime = hasKit ? DEFUSE_TIME_WITH_KIT_TICKS : DEFUSE_TIME_TICKS;
+
+            // 如果进度达到100%
+            if (currentProgress >= totalDefuseTime) {
+                defuseC4(player);
+            } else {
+                // 如果还未完成，则显示进度条
+                displayDefuseProgress(player, currentProgress, totalDefuseTime);
+            }
+        } else {
+            // --- 如果不满足条件，则重置该玩家的进度 ---
+            if (defusingPlayers.containsKey(player.getUUID())) {
+                defusingPlayers.remove(player.getUUID());
+                // 发送一条空消息来清除快捷栏上的进度条
+                player.sendSystemMessage(Component.literal(""), true); 
+            }
+        }
+    }
+
+    /**
+     * 辅助方法：检查一个玩家是否满足所有开始拆弹的条件。
+     * @param player 要检查的玩家。
+     * @return 如果满足所有条件则返回 true。
+     */
+    private boolean isPlayerEligibleToDefuse(ServerPlayer player) {
+        // 1. 检查C4是否已安放
+        if (!this.c4Planted) {
+            return false;
+        }
+        
+        // 2. 检查玩家是否为CT
+        PlayerStats stats = playerStats.get(player.getUUID());
+        if (stats == null || !"CT".equals(stats.getTeam())) {
+            return false;
+        }
+
+        // 3. 检查玩家是否在下蹲
+        if (!player.isCrouching()) {
+            return false;
+        }
+
+        // 4. 检查玩家是否正看着C4方块
+        //    使用光线追踪来获取玩家准星指向的方块
+        BlockHitResult hitResult = player.level().clip(new ClipContext(
+            player.getEyePosition(),
+            player.getEyePosition().add(player.getLookAngle().scale(5)), // 检查5格内的距离
+            ClipContext.Block.OUTLINE,
+            ClipContext.Fluid.NONE,
+            player
+        ));
+
+        // 检查光线追踪是否击中了方块，并且击中的位置是否就是C4的位置
+        if (hitResult.getType() != HitResult.Type.BLOCK || !hitResult.getBlockPos().equals(this.c4Pos)) {
+            return false;
+        }
+
+        // 所有条件都满足
+        return true;
+    }
+
+    /**
+     * 辅助方法：在玩家的快捷栏上方显示拆弹进度条。
+     * @param player 正在拆弹的玩家。
+     * @param currentProgress 当前进度(ticks)。
+     * @param totalProgress 总需进度(ticks)。
+     */
+    private void displayDefuseProgress(ServerPlayer player, int currentProgress, int totalProgress) {
+        int percentage = (int) (((float) currentProgress / totalProgress) * 100);
+        int barsFilled = (int) (((float) currentProgress / totalProgress) * 10); // 进度条总共10格
+        
+        StringBuilder progressBar = new StringBuilder("§a[");
+        for (int i = 0; i < 10; i++) {
+            if (i < barsFilled) {
+                progressBar.append("|");
+            } else {
+                progressBar.append("§7-");
+            }
+        }
+        progressBar.append("§a] §f").append(percentage).append("%");
+
+        Component message = Component.literal("拆除中... ").append(Component.literal(progressBar.toString()));
+        player.sendSystemMessage(message, true); // true 表示显示在 action bar
+    }
+
+    /**
+     * 辅助方法：执行C4的最终拆除逻辑。
+     * @param player 成功拆除C4的玩家。
+     */
+    private void defuseC4(ServerPlayer player) {
+        if (c4Pos != null) {
+            // 移除C4方块。这将自动触发 C4Block.java 中的 onRemove 方法，进而调用 onC4Defused()
+            server.overworld().removeBlock(c4Pos, false);
+            broadcastToAllPlayersInMatch(Component.literal("§b" + player.getName().getString() + " §f已经拆除了炸弹！"));
         }
     }
     
