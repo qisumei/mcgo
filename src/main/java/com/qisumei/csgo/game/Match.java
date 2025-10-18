@@ -227,14 +227,9 @@ public class Match {
             }
         }
 
-        // 每秒 (20 tick) 执行一次的逻辑
+        // 在每秒的 tick 中，更新计分板
         if (server.getTickCount() % 20 == 0) {
-            // 在战斗阶段检查存活玩家
-            if (roundState == RoundState.IN_PROGRESS) {
-                checkSurvivorsByGameMode();
-            }
-            // 更新计分板
-            updateScoreboard();
+            updateScoreboard(); // 每秒更新计分板
         }
         if (server.getTickCount() % 5 == 0) {
             updateSpectatorCameras();
@@ -243,36 +238,6 @@ public class Match {
         // 每一tick都更新Boss栏，以保证进度条平滑
         updateBossBar();
     }
-
-    /**
-     * 通过检查玩家的游戏模式来判断存活情况。
-     */
-    private void checkSurvivorsByGameMode() {
-        long survivalCtCount = 0;
-        long survivalTCount = 0;
-
-        for (UUID playerUUID : this.alivePlayers) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player != null && player.gameMode.getGameModeForPlayer() == GameType.SURVIVAL) {
-                PlayerStats stats = playerStats.get(playerUUID);
-                if (stats != null) {
-                    if ("CT".equals(stats.getTeam())) {
-                        survivalCtCount++;
-                    } else if ("T".equals(stats.getTeam())) {
-                        survivalTCount++;
-                    }
-                }
-            }
-        }
-        
-        // 如果有一方没有任何生存模式玩家，则结束回合
-        if (!this.alivePlayers.isEmpty() && survivalCtCount == 0 && survivalTCount > 0) {
-            endRound("T", "所有CT玩家阵亡");
-        } else if (!this.alivePlayers.isEmpty() && survivalTCount == 0 && survivalCtCount > 0) {
-            endRound("CT", "所有T玩家阵亡");
-        }
-    }
-    
     /**
      * 在半场时交换双方队伍。
      */
@@ -578,6 +543,7 @@ public class Match {
         if(stats != null) stats.incrementDeaths();
         
         QisCSGO.LOGGER.info("玩家 {} 在比赛 '{}' 中阵亡。", deadPlayer.getName().getString(), name);
+        this.checkRoundEndCondition();//立即检查胜利条件
         
         // 将死亡玩家设为观察者模式
         deadPlayer.setGameMode(GameType.SPECTATOR);
@@ -687,15 +653,41 @@ public class Match {
      * 检查回合是否因一方全部阵亡而结束。
      */
     private void checkRoundEndCondition() {
-        if (roundState != RoundState.IN_PROGRESS) return;
+        // 如果回合不是正在进行中，或者比赛已经没有玩家，则直接返回
+        if (roundState != RoundState.IN_PROGRESS || playerStats.isEmpty() || currentRound == 0) {
+            return;
+        }
 
-        long aliveCtCount = alivePlayers.stream().filter(uuid -> "CT".equals(playerStats.get(uuid).getTeam())).count();
-        long aliveTCount = alivePlayers.stream().filter(uuid -> "T".equals(playerStats.get(uuid).getTeam())).count();
+        // 通过检查玩家的游戏模式来统计双方存活人数
+        long aliveCtCount = alivePlayers.stream().filter(uuid -> {
+            PlayerStats stats = playerStats.get(uuid);
+            ServerPlayer p = server.getPlayerList().getPlayer(uuid);
+            return stats != null && "CT".equals(stats.getTeam()) && p != null && p.gameMode.getGameModeForPlayer() == GameType.SURVIVAL;
+        }).count();
 
-        if (aliveTCount == 0 && !playerStats.isEmpty() && currentRound > 0) {
-            endRound("CT", "所有T玩家阵亡");
-        } else if (aliveCtCount == 0 && !playerStats.isEmpty() && currentRound > 0) {
-            endRound("T", "所有CT玩家阵亡");
+        long aliveTCount = alivePlayers.stream().filter(uuid -> {
+            PlayerStats stats = playerStats.get(uuid);
+            ServerPlayer p = server.getPlayerList().getPlayer(uuid);
+            return stats != null && "T".equals(stats.getTeam()) && p != null && p.gameMode.getGameModeForPlayer() == GameType.SURVIVAL;
+        }).count();
+
+        // 如果C4已经安放，胜利逻辑会改变
+        if (c4Planted) {
+            // C4安放后，如果所有CT都阵亡了，T方立即获胜
+            if (aliveCtCount == 0) {
+                endRound("T", "所有CT玩家阵亡");
+            }
+            // 注意：如果此时T方全部阵亡，回合会继续，直到C4爆炸或被拆除。
+            // 这个胜利判断由 onC4Defused 和 onC4Exploded 处理，所以这里不需要写T方全灭的情况。
+        } else {
+            // 如果所有T都阵亡了，CT方获胜
+            if (aliveTCount == 0) {
+                endRound("CT", "所有T玩家阵亡");
+            } 
+            // 如果所有CT都阵亡了，T方获胜
+            else if (aliveCtCount == 0) {
+                endRound("T", "所有CT玩家阵亡");
+            }
         }
     }
     
