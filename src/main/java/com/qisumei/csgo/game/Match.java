@@ -739,7 +739,6 @@ public class Match {
             .thenComparingInt(e -> e.getValue().getDeaths()))
             .limit(15)
             .toList();
-            .toList();
 
         for (Map.Entry<UUID, PlayerStats> entry : sortedPlayers) {
             ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
