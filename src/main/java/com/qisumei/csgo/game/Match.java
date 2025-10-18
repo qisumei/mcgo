@@ -169,25 +169,29 @@ public class Match {
      * 开始一个新回合的完整流程。
      */
     private void startNewRound() {
-        // 在回合开始时清理战场上所有掉落的物品
+        // 1. 清理战场上的掉落物
         clearDroppedItems();
         
+        // 2. 推进回合数并重置C4状态
         this.currentRound++;
-        resetC4State(); // 重置C4状态
+        resetC4State();
 
-        // 检查是否需要换边
+        // 3. 检查是否需要换边
         if (this.currentRound == (this.totalRounds / 2) + 1) {
             swapTeams();
         }
         
-        // 为所有玩家发放回合收入
-        distributeRoundIncome();
-
-        // 进入购买阶段
+        // 4. 设置回合状态为购买阶段
         this.roundState = RoundState.BUY_PHASE;
         this.tickCounter = ServerConfig.buyPhaseSeconds * 20;
 
-        // 为所有玩家添加购买阶段的无敌效果
+        // 5. [顺序调整] 先传送玩家、清空背包、并发放该回合应有的装备（包括手枪局武器）
+        teleportAndPreparePlayers();
+        
+        // 6. [顺序调整] 在装备发放完毕后，再处理经济，发放金钱
+        distributeRoundIncome();
+
+        // 7. 为所有玩家添加购买阶段的无敌和减速效果
         int resistanceDuration = ServerConfig.buyPhaseSeconds * 20;
         for (UUID playerUUID : playerStats.keySet()) {
             ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
@@ -196,13 +200,12 @@ public class Match {
             }
         }
 
+        // 8. 广播回合开始的消息
         broadcastToAllPlayersInMatch(Component.literal("第 " + this.currentRound + " 回合开始！购买阶段！"));
         QisCSGO.LOGGER.info("比赛 '{}': 第 {} 回合开始，进入购买阶段。", name, currentRound);
         
-        // 传送玩家、分发C4并生成商店
-        teleportAndPreparePlayers();
+        // 9. 最后再给T发放C4
         giveC4ToRandomT();
-        spawnShops();
     }
 
     /**
@@ -1028,6 +1031,7 @@ public class Match {
         // 为这名新加入的玩家应用计分板，确保他能立即看到。
         reapplyScoreboardToPlayer(player);
         this.bossBar.addPlayer(player);
+        setPlayerKnockbackResistance(player, 1000.0);
     }
     
     public void removePlayer(ServerPlayer player) { 
