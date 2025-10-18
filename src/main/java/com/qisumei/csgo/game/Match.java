@@ -24,7 +24,6 @@ import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Match类，管理一场CSGO比赛的整个生命周期和所有核心逻辑。
@@ -389,7 +388,7 @@ public class Match {
             .filter(e -> "T".equals(e.getValue().getTeam()))
             .map(e -> server.getPlayerList().getPlayer(e.getKey()))
             .filter(Objects::nonNull)
-            .collect(Collectors.toList()); // 使用 collect(Collectors.toList()) 保证兼容性
+            .toList(); // 使用 collect(Collectors.toList()) 保证兼容性
 
         if (!tPlayers.isEmpty()) {
             ServerPlayer c4Carrier = tPlayers.get(new Random().nextInt(tPlayers.size()));
@@ -739,7 +738,7 @@ public class Match {
             .sorted(Comparator.comparingInt((Map.Entry<UUID, PlayerStats> e) -> e.getValue().getKills()).reversed()
             .thenComparingInt(e -> e.getValue().getDeaths()))
             .limit(15)
-            .collect(Collectors.toList());
+            .toList();
 
         for (Map.Entry<UUID, PlayerStats> entry : sortedPlayers) {
             ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
@@ -807,9 +806,10 @@ public class Match {
             return;
         }
 
-        double minX = allPositions.get(0).getX();
-        double minY = allPositions.get(0).getY();
-        double minZ = allPositions.get(0).getZ();
+        double minX = allPositions.getFirst().getX();
+        double minY = allPositions.getFirst().getY();
+        double minZ = allPositions.getFirst().getZ();
+
         double maxX = minX;
         double maxY = minY;
         double maxZ = minZ;
