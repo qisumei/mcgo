@@ -20,6 +20,8 @@ import net.minecraft.world.scores.Objective;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.server.level.ServerBossEvent;
+import net.minecraft.world.BossEvent;
 
 import java.util.*;
 
@@ -69,6 +71,9 @@ public class Match {
     private Scoreboard scoreboard;
     private Objective objective;
 
+    // --- Boss栏计时器 ---
+    private final ServerBossEvent bossBar;
+
     public MatchPreset toPreset() {
         return new MatchPreset(
             this.ctSpawns,
@@ -116,6 +121,11 @@ public class Match {
         this.lastRoundWinner = "";
         this.roundSurvivors = new HashSet<>();
         this.c4CountdownHandler = new C4CountdownHandler(this);
+        this.bossBar = new ServerBossEvent(
+            Component.literal("等待比赛开始..."), // 初始显示的文字
+            BossEvent.BossBarColor.WHITE,          // 初始颜色
+            BossEvent.BossBarOverlay.PROGRESS    // 样式为进度条
+        );
     }
 
     public void start() {
@@ -176,6 +186,18 @@ public class Match {
                     }
                 }
             }
+
+            // --- 修改代码 ---
+        // Boss栏进度条
+        if (server.getTickCount() % 10 == 0) { 
+            if (roundState == RoundState.IN_PROGRESS) {
+                checkSurvivorsByGameMode();
+            }
+            // 计分板还是每秒更新一次
+            updateScoreboard();
+        }
+        // Boss栏在每一tick都更新
+        updateBossBar();
         }
 
         // --- 每秒检测一次 ---
@@ -626,6 +648,7 @@ public class Match {
         broadcastToAllPlayersInMatch(Component.literal("比赛已被管理员强制结束。"));
         removeShops();
         removeScoreboard();
+        this.bossBar.removeAllPlayers();
 
         for (UUID playerUUID : playerStats.keySet()) {
             ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
@@ -742,6 +765,59 @@ public class Match {
             this.scoreboard.getOrCreatePlayerScore(player, this.objective).set(currentKills);
         }
     }
+
+
+    /**
+     * 新增方法：更新Boss栏的显示内容和进度。
+     * 根据当前的回合状态（购买、进行中、C4倒计时等）来改变Boss栏。
+     */
+    private void updateBossBar() {
+        // 根据当前的回合状态来决定显示什么内容
+        switch (this.roundState) {
+            case BUY_PHASE:
+                // 购买阶段
+                int buyPhaseTotalTicks = ServerConfig.buyPhaseSeconds * 20;
+                float buyProgress = (float) this.tickCounter / buyPhaseTotalTicks;
+                this.bossBar.setName(Component.literal("购买阶段剩余: " + (this.tickCounter / 20 + 1) + "s"));
+                this.bossBar.setColor(BossEvent.BossBarColor.GREEN);
+                this.bossBar.setProgress(buyProgress);
+                break;
+
+            case IN_PROGRESS:
+                // 战斗阶段
+                if (this.c4Planted) {
+                    // 如果C4已经安放
+                    int c4TotalTicks = 40 * 20; // C4总共40秒
+                    // 注意：C4的倒计时是从C4CountdownHandler里获取的，但为了同步显示，我们这里也用tickCounter
+                    float c4Progress = (float) this.tickCounter / c4TotalTicks;
+                    this.bossBar.setName(Component.literal("C4即将爆炸: " + (this.tickCounter / 20 + 1) + "s").withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
+                    this.bossBar.setColor(BossEvent.BossBarColor.RED);
+                    this.bossBar.setProgress(c4Progress);
+                } else {
+                    // 如果C4未安放
+                    int roundTotalTicks = this.roundTimeSeconds * 20;
+                    float roundProgress = (float) this.tickCounter / roundTotalTicks;
+                    this.bossBar.setName(Component.literal("回合剩余时间: " + (this.tickCounter / 20 + 1) + "s"));
+                    this.bossBar.setColor(BossEvent.BossBarColor.WHITE);
+                    this.bossBar.setProgress(roundProgress);
+                }
+                break;
+
+            case ROUND_END:
+                // 回合结束阶段
+                this.bossBar.setName(Component.literal("回合结束"));
+                this.bossBar.setColor(BossEvent.BossBarColor.YELLOW);
+                this.bossBar.setProgress(1.0f);
+                break;
+
+            default:
+                // 其他情况（如暂停）
+                this.bossBar.setName(Component.literal("比赛暂停"));
+                this.bossBar.setColor(BossEvent.BossBarColor.PURPLE);
+                this.bossBar.setProgress(1.0f);
+                break;
+        }
+    }
     
     // --- Getters and Setters ---
     
@@ -770,10 +846,12 @@ public class Match {
         playerStats.put(player.getUUID(), new PlayerStats(team)); 
         // 为这名新加入的玩家应用计分板，确保他能立即看到。
         reapplyScoreboardToPlayer(player);
+        this.bossBar.addPlayer(player);
     }
     
     public void removePlayer(ServerPlayer player) { 
         playerStats.remove(player.getUUID()); 
+        this.bossBar.removePlayer(player);
     }
     
     public void addCtSpawn(BlockPos pos) { 
@@ -805,6 +883,13 @@ public class Match {
      */
     public RoundState getRoundState() {
         return this.roundState;
+    }
+    /**
+     * 获取比赛的Boss栏实例。
+     * @return ServerBossEvent 实例
+     */
+    public ServerBossEvent getBossBar() {
+        return this.bossBar;
     }
     
 }

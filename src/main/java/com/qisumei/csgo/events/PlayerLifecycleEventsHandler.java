@@ -36,6 +36,8 @@ public class PlayerLifecycleEventsHandler {
                 player.sendSystemMessage(Component.literal("你已重新连接至比赛，请等待下一回合开始。"));
                 // --- 新增代码: 为重连的玩家重新应用计分板 ---
                 match.reapplyScoreboardToPlayer(player);
+                // --- 新增代码: 为重连的玩家重新显示Boss栏 ---
+                match.getBossBar().addPlayer(player); // 我们需要为Match类添加一个getter
             }
         }
     }
