@@ -1054,7 +1054,12 @@ public class Match {
         this.bossBar.removePlayer(player);
         setPlayerKnockbackResistance(player, 0.0);
     }
-    
+
+    public void createBombBlock(){
+        if (c4Pos == null) return;
+        server.overworld().setBlock(c4Pos, QisCSGO.C4_BLOCK.get().defaultBlockState(), 11);
+    }
+
     public void addCtSpawn(BlockPos pos) { 
         this.ctSpawns.add(pos); 
     }

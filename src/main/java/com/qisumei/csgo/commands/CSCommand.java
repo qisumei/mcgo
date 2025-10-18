@@ -6,6 +6,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.qisumei.csgo.QisCSGO;
+import com.qisumei.csgo.c4.handler.C4CountdownHandler;
 import com.qisumei.csgo.config.ServerConfig;
 import com.qisumei.csgo.game.Match;
 import com.qisumei.csgo.game.MatchManager;
@@ -21,6 +22,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 
@@ -131,6 +133,17 @@ public class CSCommand {
 
                 )
             )
+                .then(Commands.literal("test")
+                        .then(Commands.literal("bomb")
+                                .then(Commands.argument("match",StringArgumentType.string())
+                                        .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                                .then(Commands.argument("remain", IntegerArgumentType.integer())
+                                                        .executes(CSCommand::testBomb)
+                                                )
+                                        )
+                                )
+                        )
+                )
         );
     }
 
@@ -602,6 +615,33 @@ public class CSCommand {
         executeServerCommand(source, "team remove " + match.getTTeamName());
 
         source.sendSuccess(() -> Component.literal("已强制结束并清理了比赛 '" + matchName + "'。"), true);
+        return 1;
+    }
+    /**
+     * 测试C4爆炸
+     *
+     * @param context 命令上下文
+     * @return 执行结果代码
+     */
+    private static int testBomb(CommandContext<CommandSourceStack> context){
+        BlockPos pos = BlockPosArgument.getBlockPos(context, "pos");
+        int remain = IntegerArgumentType.getInteger(context, "remain");
+        String matchName = StringArgumentType.getString(context, "match");
+        CommandSourceStack source = context.getSource();
+        Match match = MatchManager.getMatch(matchName);
+        if (match == null) {
+            source.sendFailure(Component.literal("错误：未找到名为 '" + matchName + "' 的比赛"));
+            return 0;
+        }
+        if (match.getState() != Match.MatchState.IN_PROGRESS){
+            source.sendFailure(Component.literal("错误：比赛 '" + matchName + "' 未开始或已结束"));
+            return 0;
+        }
+        match.onC4Planted(pos);
+        match.createBombBlock();
+        for(int i = (40 - remain) * 20; i >= 0; i--){
+            match.tick();
+        }
         return 1;
     }
 }
