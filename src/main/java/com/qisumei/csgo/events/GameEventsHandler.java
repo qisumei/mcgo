@@ -138,6 +138,7 @@ public class GameEventsHandler {
                         .append(Component.literal(" 阵亡了").withStyle(ChatFormatting.GRAY));
                     match.broadcastToAllPlayersInMatch(deathMessage);
                 }
+                // 不再在这里调用markPlayerAsDead，因为死亡事件处理中会自动将玩家设为观察者
                 match.markPlayerAsDead(deadPlayer);
             }
         }

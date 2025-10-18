@@ -64,6 +64,8 @@ public class Match {
     private String lastRoundWinner;
     private final Set<UUID> roundSurvivors;
     private int scoreboardRebuildCounter = 0;
+    // 记录每个队伍最后一名死亡玩家的位置，用于全队死亡后的观察视角
+    private final Map<String, BlockPos> lastTeammateDeathPos = new HashMap<>();
 
     // --- C4 相关 ---
     private final C4CountdownHandler c4CountdownHandler;
@@ -564,12 +566,57 @@ public class Match {
     public void markPlayerAsDead(ServerPlayer deadPlayer) {
         if (!this.alivePlayers.contains(deadPlayer.getUUID())) return;
         
+        // 记录死亡玩家的位置，用于观察视角
+        this.lastTeammateDeathPos.put(getPlayerStats().get(deadPlayer.getUUID()).getTeam(), deadPlayer.blockPosition());
+        
         this.alivePlayers.remove(deadPlayer.getUUID());
         PlayerStats stats = playerStats.get(deadPlayer.getUUID());
         if(stats != null) stats.incrementDeaths();
         
         QisCSGO.LOGGER.info("玩家 {} 在比赛 '{}' 中阵亡。", deadPlayer.getName().getString(), name);
+        
+        // 将死亡玩家设为观察者模式
+        deadPlayer.setGameMode(GameType.SPECTATOR);
+        
+        // 尝试锁定视角到队友或最后死亡位置
+        lockSpectatorToTeammateOrLastPos(deadPlayer);
+        
         this.checkRoundEndCondition();
+    }
+    
+    /**
+     * 锁定观察者视角到队友或最后死亡位置
+     * @param deadPlayer 死亡的玩家
+     */
+    private void lockSpectatorToTeammateOrLastPos(ServerPlayer deadPlayer) {
+        PlayerStats deadPlayerStats = getPlayerStats().get(deadPlayer.getUUID());
+        if (deadPlayerStats == null) return;
+        
+        String team = deadPlayerStats.getTeam();
+        
+        // 查找同队的存活玩家
+        ServerPlayer targetPlayer = null;
+        for (UUID playerUUID : this.alivePlayers) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player != null && player.gameMode.getGameModeForPlayer() == GameType.SURVIVAL) {
+                PlayerStats stats = playerStats.get(playerUUID);
+                if (stats != null && team.equals(stats.getTeam())) {
+                    targetPlayer = player;
+                    break;
+                }
+            }
+        }
+        
+        // 如果找到了同队的存活玩家，则锁定到该玩家
+        if (targetPlayer != null) {
+            deadPlayer.setCamera(targetPlayer);
+        } else {
+            // 如果没有找到同队存活玩家，则锁定到该队最后死亡位置的上空
+            BlockPos lastDeathPos = this.lastTeammateDeathPos.get(team);
+            if (lastDeathPos != null) {
+                deadPlayer.teleportTo(lastDeathPos.getX(), lastDeathPos.getY() + 10, lastDeathPos.getZ());
+            }
+        }
     }
     
     /**
@@ -578,6 +625,7 @@ public class Match {
      */
     public void handlePlayerRespawn(ServerPlayer respawningPlayer) {
         respawningPlayer.setGameMode(GameType.SPECTATOR);
+        lockSpectatorToTeammateOrLastPos(respawningPlayer);
     }
     
     /**
