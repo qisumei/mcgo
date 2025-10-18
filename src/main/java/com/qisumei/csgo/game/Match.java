@@ -7,9 +7,7 @@ import com.qisumei.csgo.util.ItemNBTHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import com.qisumei.csgo.game.preset.MatchPreset;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -19,10 +17,9 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.scores.DisplaySlot;
 import net.minecraft.world.scores.Objective;
-import net.minecraft.world.scores.Score;
 import net.minecraft.world.scores.Scoreboard;
-import net.minecraft.world.scores.ScoreHolder;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
+import net.minecraft.world.entity.item.ItemEntity;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -130,6 +127,7 @@ public class Match {
     }
 
     private void startNewRound() {
+        clearDroppedItems();//在回合开始时清理战场上所有掉落的物品
         this.currentRound++;
         resetC4State(); // 重置C4状态
 
@@ -555,6 +553,64 @@ public class Match {
         return (bombsiteA != null && bombsiteA.contains(pos.getX(), pos.getY(), pos.getZ())) || (bombsiteB != null && bombsiteB.contains(pos.getX(), pos.getY(), pos.getZ()));
     }
 
+
+    private void clearDroppedItems() {
+        // 创建一个列表，用来收集比赛中所有的关键坐标点。
+        List<BlockPos> allPositions = new ArrayList<>();
+        // 将CT和T的出生点都添加进去。
+        allPositions.addAll(ctSpawns);
+        allPositions.addAll(tSpawns);
+        // 如果包点A和B已经设置，也将它们的边界坐标添加进去。
+        if (bombsiteA != null) {
+            allPositions.add(BlockPos.containing(bombsiteA.minX, bombsiteA.minY, bombsiteA.minZ));
+            allPositions.add(BlockPos.containing(bombsiteA.maxX, bombsiteA.maxY, bombsiteA.maxZ));
+        }
+        if (bombsiteB != null) {
+            allPositions.add(BlockPos.containing(bombsiteB.minX, bombsiteB.minY, bombsiteB.minZ));
+            allPositions.add(BlockPos.containing(bombsiteB.maxX, bombsiteB.maxY, bombsiteB.maxZ));
+        }
+
+        // 如果没有任何坐标点（比如比赛还未完全设置），则直接返回，避免出错。
+        if (allPositions.isEmpty()) {
+            return;
+        }
+
+        // --- 计算整个比赛区域的边界框 (AABB) ---
+        // 初始化最小和最大坐标。
+        double minX = allPositions.get(0).getX();
+        double minY = allPositions.get(0).getY();
+        double minZ = allPositions.get(0).getZ();
+        double maxX = minX;
+        double maxY = minY;
+        double maxZ = minZ;
+
+        // 遍历所有坐标点，找出整个区域的最小和最大坐标。
+        for (BlockPos pos : allPositions) {
+            minX = Math.min(minX, pos.getX());
+            minY = Math.min(minY, pos.getY());
+            minZ = Math.min(minZ, pos.getZ());
+            maxX = Math.max(maxX, pos.getX());
+            maxY = Math.max(maxY, pos.getY());
+            maxZ = Math.max(maxZ, pos.getZ());
+        }
+
+        // 基于找到的坐标创建一个覆盖整个比赛区域的边界框，并稍微扩大一点范围以确保覆盖。
+        AABB matchArea = new AABB(minX - 50, minY - 20, minZ - 50, maxX + 50, maxY + 20, maxZ + 50);
+
+        // --- 清除物品 ---
+        // 获取在上述边界框内的所有掉落物品实体（ItemEntity）。
+        List<ItemEntity> itemsToRemove = server.overworld().getEntitiesOfClass(ItemEntity.class, matchArea, (entity) -> true);
+
+        // 遍历列表，并移除每一个物品实体。
+        for (ItemEntity itemEntity : itemsToRemove) {
+            // .discard() 方法会安全地将实体从世界中移除。
+            itemEntity.discard();
+        }
+
+        // 在服务器日志中记录本次清理操作，方便调试。
+        QisCSGO.LOGGER.info("比赛 '{}': 清理了 {} 个掉落物品。", this.name, itemsToRemove.size());
+    }
+
     // --- 广播和强制结束 ---
     
     public void broadcastToAllPlayersInMatch(Component message) {
@@ -667,6 +723,26 @@ public class Match {
             this.objective = null;
         }
     }
+    /**
+     * 新增方法：为指定玩家重新应用计分板。
+     * 当新玩家加入或断线重连时调用，确保他们能看到计分板。
+     * @param player 需要接收计分板信息的玩家。
+     */
+    public void reapplyScoreboardToPlayer(ServerPlayer player) {
+        // 确保计分板和计分项 (objective) 已经创建。
+        if (this.scoreboard != null && this.objective != null) {
+            // 为所有玩家（包括新玩家）重新设置侧边栏的显示目标。
+            // 服务端会自动将这个信息同步给客户端。
+            this.scoreboard.setDisplayObjective(DisplaySlot.SIDEBAR, this.objective);
+
+            // 同时，更新该玩家在计分板上的分数，以确保信息同步。
+            PlayerStats stats = this.playerStats.get(player.getUUID());
+            int currentKills = (stats != null) ? stats.getKills() : 0;
+            
+            // 获取或创建该玩家的分数记录，并设置其值为当前的击杀数。
+            this.scoreboard.getOrCreatePlayerScore(player, this.objective).set(currentKills);
+        }
+    }
     
     // --- Getters and Setters ---
     
@@ -685,8 +761,16 @@ public class Match {
     public void setBombsiteA(AABB area) { this.bombsiteA = area; }
     public void setBombsiteB(AABB area) { this.bombsiteB = area; }
     
+    /**
+     * 将一名玩家添加到比赛中。
+     * @param player 要添加的玩家。
+     * @param team   玩家要加入的队伍 ("CT" 或 "T")。
+     */
     public void addPlayer(ServerPlayer player, String team) { 
+        // 将玩家的UUID和新的统计数据存入Map中。
         playerStats.put(player.getUUID(), new PlayerStats(team)); 
+        // 为这名新加入的玩家应用计分板，确保他能立即看到。
+        reapplyScoreboardToPlayer(player);
     }
     
     public void removePlayer(ServerPlayer player) { 
@@ -716,4 +800,12 @@ public class Match {
     public void setTShopPos(BlockPos pos) { 
         this.tShopPos = pos; 
     }
+    /**
+     * 获取当前的回合状态。
+     * @return 当前的 RoundState 枚举值 (例如 BUY_PHASE, IN_PROGRESS, ROUND_END)。
+     */
+    public RoundState getRoundState() {
+        return this.roundState;
+    }
+    
 }

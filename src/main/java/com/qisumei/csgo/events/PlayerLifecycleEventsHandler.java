@@ -18,7 +18,7 @@ public class PlayerLifecycleEventsHandler {
 
     /**
      * 处理玩家登录事件
-     * 当玩家登录时，检查其是否处于进行中的比赛，如果是则设置为旁观者模式
+     * 当玩家登录时，检查其是否处于进行中的比赛，如果是则设置为旁观者模式并重新同步计分板。
      *
      * @param event 玩家登录事件对象，包含登录的玩家实体
      */
@@ -34,6 +34,8 @@ public class PlayerLifecycleEventsHandler {
             if (match != null && match.getState() == Match.MatchState.IN_PROGRESS) {
                 player.setGameMode(GameType.SPECTATOR);
                 player.sendSystemMessage(Component.literal("你已重新连接至比赛，请等待下一回合开始。"));
+                // --- 新增代码: 为重连的玩家重新应用计分板 ---
+                match.reapplyScoreboardToPlayer(player);
             }
         }
     }

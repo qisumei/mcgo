@@ -47,7 +47,7 @@ public class C4Item extends Item {
         return UseAnim.BLOCK;
     }
 
-    /**
+/**
      * 处理玩家右键使用 C4 的行为。
      * 包括检查玩家是否处于比赛状态、是否为恐怖分子阵营、是否在炸弹安放区等条件。
      *
@@ -61,11 +61,15 @@ public class C4Item extends Item {
     public InteractionResultHolder<ItemStack> use(@javax.annotation.Nonnull Level world, @javax.annotation.Nonnull Player player,@javax.annotation.Nonnull InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
 
-        // --- 修正 #1: 检查 player 是否为 ServerPlayer ---
+        // 检查使用者是否为服务端玩家
         if (player instanceof ServerPlayer sp) {
             Match match = MatchManager.getPlayerMatch(sp);
-            if (match == null || match.getState() != Match.MatchState.IN_PROGRESS) {
-                sp.sendSystemMessage(Component.literal("§c你必须在比赛中才能安放C4！"));
+
+            // --- 核心修正: 增加对回合状态的检查 ---
+            // 必须是比赛进行中，并且当前回合也必须是正在进行中（非购买、非结束阶段）
+            if (match == null || match.getState() != Match.MatchState.IN_PROGRESS || match.getRoundState() != Match.RoundState.IN_PROGRESS) {
+                // 如果回合已经结束，则发送提示信息并阻止安放。
+                sp.sendSystemMessage(Component.literal("§c现在不是安放C4的时间！"));
                 return InteractionResultHolder.fail(stack);
             }
 
@@ -75,7 +79,6 @@ public class C4Item extends Item {
                 return InteractionResultHolder.fail(stack);
             }
 
-            // --- 修正 #2: 调用 isPlayerInBombsite 时传入 ServerPlayer ---
             if (!match.isPlayerInBombsite(sp)) {
                 sp.sendSystemMessage(Component.literal("§c你必须在炸弹安放区才能安放C4！"));
                 return InteractionResultHolder.fail(stack);
@@ -87,6 +90,7 @@ public class C4Item extends Item {
             }
         }
 
+        // 如果所有检查都通过，则开始使用物品（播放安放动画）。
         player.startUsingItem(hand);
         return InteractionResultHolder.consume(stack);
     }

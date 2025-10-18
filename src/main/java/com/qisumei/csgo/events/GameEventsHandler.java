@@ -1,5 +1,6 @@
 package com.qisumei.csgo.events;
 
+import com.qisumei.csgo.QisCSGO;
 import com.qisumei.csgo.game.EconomyManager;
 import com.qisumei.csgo.game.Match;
 import com.qisumei.csgo.game.MatchManager;
@@ -13,18 +14,17 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 /**
- * 游戏事件处理器，用于处理服务器 tick 和玩家死亡等游戏核心事件。
+ * 游戏事件处理器，用于处理服务器 tick、玩家 tick 和玩家死亡等游戏核心事件。
  */
 @EventBusSubscriber
 public class GameEventsHandler {
 
     /**
      * 每个服务器 tick 结束后调用该方法，驱动 MatchManager 的逻辑更新。
-     *
-     * @param event 服务器 tick 事件对象（Post 类型）
      */
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
@@ -32,25 +32,92 @@ public class GameEventsHandler {
     }
 
     /**
-     * 处理玩家死亡事件，在比赛中根据击杀情况广播消息、给予经济奖励并更新统计数据。
-     *
-     * @param event 生物死亡事件对象，包含死亡实体及伤害来源信息
+     * 在每个玩家的游戏刻（tick）中调用。
+     * 用于持续检查并纠正CT玩家持有C4的情况。
+     * @param event 玩家 tick 事件对象
+     */
+    @SubscribeEvent
+    public static void onPlayerTick(PlayerTickEvent.Post event) {
+        // 确认事件发生在服务端，并且玩家是 ServerPlayer 类型
+        if (event.getEntity() instanceof ServerPlayer player) {
+            // 获取该玩家所在的比赛
+            Match match = MatchManager.getPlayerMatch(player);
+            // 如果玩家不在比赛中，则不进行任何操作
+            if (match == null) {
+                return;
+            }
+
+            // 获取玩家的统计数据（包含队伍信息）
+            PlayerStats stats = match.getPlayerStats().get(player.getUUID());
+            if (stats == null) {
+                return;
+            }
+
+            // 核心逻辑一：检查CT玩家是否持有C4
+            // 如果玩家是CT阵营
+            if ("CT".equals(stats.getTeam())) {
+                // 遍历玩家的主物品栏
+                for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+                    // 获取当前格子的物品
+                    ItemStack stack = player.getInventory().getItem(i);
+                    // 检查这个物品是不是C4
+                    if (stack.is(QisCSGO.C4_ITEM.get())) {
+
+                        // 1. 创建C4物品的一个副本
+                        ItemStack c4ToDrop = stack.copy();
+                        
+                        // 2. 将玩家物品栏中对应格子的物品清空。
+                        player.getInventory().setItem(i, ItemStack.EMPTY);
+                        
+                        // 3. 调用玩家实体的 drop 方法，将C4副本扔到地上。
+                        //    第二个参数 'false' 意味着即使玩家死亡也扔出物品。
+                        //    第三个参数 'false' 意味着这不是玩家主动丢弃的，不会有拾取延迟。
+                        player.drop(c4ToDrop, false, false);
+
+                        // 4. 给玩家一个明确的提示。
+                        player.sendSystemMessage(Component.literal("§c作为CT，你不能持有C4！已强制丢弃。").withStyle(ChatFormatting.RED));
+                        
+                        // 5. 在日志中记录，方便调试。
+                        QisCSGO.LOGGER.warn("已强制CT玩家 {} 丢弃C4。", player.getName().getString());
+                        
+                        
+                        break; 
+                    }
+                }
+            }
+
+            // --- 逻辑二：为T提供包点指引 ---
+            else if ("T".equals(stats.getTeam())) {
+                // 检查玩家主手或副手是否持有C4
+                boolean holdingC4 = player.getMainHandItem().is(QisCSGO.C4_ITEM.get()) || player.getOffhandItem().is(QisCSGO.C4_ITEM.get());
+
+                // 如果手持C4，并且当前回合正在进行中
+                if (holdingC4 && match.getRoundState() == Match.RoundState.IN_PROGRESS) {
+                    // 检查玩家是否在任何一个包点内
+                    if (match.isPlayerInBombsite(player)) {
+                        // 创建要在快捷栏上方显示的消息
+                        Component message = Component.literal("你正处于炸弹安放区，可以安放C4！").withStyle(ChatFormatting.GREEN);
+                        // 发送消息，第二个参数 'true' 意味着它显示在 action bar 上
+                        player.sendSystemMessage(message, true);
+                    }
+                }
+            }
+        }
+    }
+
+
+    /**
+     * 处理玩家死亡事件。
      */
     @SubscribeEvent
     public static void onPlayerDeath(LivingDeathEvent event) {
-        // 判断死亡实体是否是服务器端玩家
         if (event.getEntity() instanceof ServerPlayer deadPlayer) {
-            // 获取该玩家所在的比赛实例
             Match match = MatchManager.getPlayerMatch(deadPlayer);
-            // 只有在比赛进行中才处理死亡逻辑
             if (match != null && match.getState() == Match.MatchState.IN_PROGRESS) {
-
                 DamageSource source = event.getSource();
                 Entity killerEntity = source.getEntity();
 
-                // 如果杀手也是服务器端玩家，并且不是自己杀死自己
                 if (killerEntity instanceof ServerPlayer killerPlayer && killerPlayer != deadPlayer) {
-                    // 构造击杀提示消息：[击杀者] 使用 [武器] 击杀了 [死者]
                     ItemStack weapon = killerPlayer.getMainHandItem();
                     Component deathMessage = killerPlayer.getDisplayName().copy().withStyle(ChatFormatting.AQUA)
                         .append(Component.literal(" 使用 ").withStyle(ChatFormatting.GRAY))
@@ -58,27 +125,19 @@ public class GameEventsHandler {
                         .append(Component.literal(" 击杀了 ").withStyle(ChatFormatting.GRAY))
                         .append(deadPlayer.getDisplayName().copy().withStyle(ChatFormatting.RED));
 
-                    // 广播击杀消息给所有参与当前比赛的玩家
                     match.broadcastToAllPlayersInMatch(deathMessage);
 
-                    // 给予击杀者金钱奖励并增加击杀数统计
                     if (match.getPlayerStats().containsKey(killerPlayer.getUUID())) {
                         int reward = EconomyManager.getRewardForKill(weapon);
                         if (reward > 0) EconomyManager.giveMoney(killerPlayer, reward);
-
                         PlayerStats killerStats = match.getPlayerStats().get(killerPlayer.getUUID());
                         if(killerStats != null) killerStats.incrementKills();
                     }
                 } else {
-                    // 若无有效击杀者，则显示普通阵亡消息
                     Component deathMessage = deadPlayer.getDisplayName().copy().withStyle(ChatFormatting.RED)
                         .append(Component.literal(" 阵亡了").withStyle(ChatFormatting.GRAY));
-
-                    // 广播阵亡消息给所有参与当前比赛的玩家
                     match.broadcastToAllPlayersInMatch(deathMessage);
                 }
-
-                // 标记该玩家已死亡
                 match.markPlayerAsDead(deadPlayer);
             }
         }
