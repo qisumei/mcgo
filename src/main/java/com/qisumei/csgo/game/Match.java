@@ -22,7 +22,6 @@ import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import net.minecraft.world.entity.item.ItemEntity;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class Match {
 
@@ -208,9 +207,9 @@ public class Match {
         }
         
         // 如果有一方没有任何生存模式玩家，则结束回合
-        if (this.alivePlayers.size() > 0 && survivalCtCount == 0 && survivalTCount > 0) {
+        if (!this.alivePlayers.isEmpty()&& survivalCtCount == 0 && survivalTCount > 0) {
             endRound("T", "所有CT玩家死亡");
-        } else if (this.alivePlayers.size() > 0 && survivalTCount == 0 && survivalCtCount > 0) {
+        } else if (!this.alivePlayers.isEmpty() && survivalTCount == 0 && survivalCtCount > 0) {
             endRound("CT", "所有T玩家死亡");
         }
     }
@@ -329,7 +328,7 @@ public class Match {
             .filter(e -> "T".equals(e.getValue().getTeam()))
             .map(e -> server.getPlayerList().getPlayer(e.getKey()))
             .filter(Objects::nonNull)
-            .collect(Collectors.toList());
+            .toList();
 
         if (!tPlayers.isEmpty()) {
             ServerPlayer c4Carrier = tPlayers.get(new Random().nextInt(tPlayers.size()));
@@ -676,7 +675,7 @@ public class Match {
             .sorted(Comparator.comparingInt((Map.Entry<UUID, PlayerStats> e) -> e.getValue().getKills()).reversed()
             .thenComparingInt(e -> e.getValue().getDeaths()))
             .limit(15)
-            .collect(Collectors.toList());
+            .toList();
 
         for (Map.Entry<UUID, PlayerStats> entry : sortedPlayers) {
             ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
