@@ -154,6 +154,11 @@ public class Match {
      */
     public void start() {
         this.state = MatchState.IN_PROGRESS;
+
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            setPlayerKnockbackResistance(player, 1000.0);
+        }
         setupScoreboard();
         broadcastToAllPlayersInMatch(Component.literal("比赛开始！"));
         startNewRound();
@@ -512,6 +517,10 @@ public class Match {
         broadcastToAllPlayersInMatch(Component.literal("比赛结束！胜利者是 ").append(winner).append("!"));
         QisCSGO.LOGGER.info("比赛 '{}' 结束, {}方胜利.", name, winningTeam);
         removeScoreboard();
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            setPlayerKnockbackResistance(player, 0.0);
+        }
     }
 
     /**
@@ -522,6 +531,11 @@ public class Match {
         broadcastToAllPlayersInMatch(Component.literal("比赛平局！"));
         QisCSGO.LOGGER.info("比赛 '{}' 结束, 平局.", name);
         removeScoreboard();
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            setPlayerKnockbackResistance(player, 0.0);
+        }
+        this.bossBar.removeAllPlayers();
     }
 
     /**
@@ -732,6 +746,7 @@ public class Match {
             ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
             if (player != null) {
                 player.setGameMode(server.getDefaultGameType());
+                setPlayerKnockbackResistance(player, 0.0);
                 player.removeAllEffects();
             }
         }
@@ -963,6 +978,7 @@ public class Match {
     public void removePlayer(ServerPlayer player) { 
         playerStats.remove(player.getUUID()); 
         this.bossBar.removePlayer(player);
+        setPlayerKnockbackResistance(player, 0.0);
     }
     
     public void addCtSpawn(BlockPos pos) { 
@@ -1001,6 +1017,18 @@ public class Match {
      */
     public ServerBossEvent getBossBar() {
         return this.bossBar;
+    }
+    /**
+     * 新增方法：为一个指定的玩家设置击退抗性属性。
+     * @param player 目标玩家。
+     * @param amount 击退抗性的值（1000.0 为 100% 抗性, 0.0 为默认值）。
+     */
+    private void setPlayerKnockbackResistance(ServerPlayer player, double amount) {
+        if (player != null) {
+            String command = "attribute " + player.getName().getString() + " minecraft:generic.knockback_resistance base set " + amount;
+            
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
+        }
     }
     
 }
