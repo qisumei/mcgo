@@ -14,6 +14,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.BossEvent;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
@@ -234,6 +235,9 @@ public class Match {
             }
             // 更新计分板
             updateScoreboard();
+        }
+        if (server.getTickCount() % 5 == 0) {
+            updateSpectatorCameras();
         }
         
         // 每一tick都更新Boss栏，以保证进度条平滑
@@ -615,6 +619,57 @@ public class Match {
             BlockPos lastDeathPos = this.lastTeammateDeathPos.get(team);
             if (lastDeathPos != null) {
                 deadPlayer.teleportTo(lastDeathPos.getX(), lastDeathPos.getY() + 10, lastDeathPos.getZ());
+            }
+        }
+    }
+    /**
+     * 查找同队的存活玩家
+     * @param team 队伍名称
+     * @return 存活的队友，如果没有则返回null
+     */
+    private ServerPlayer findAliveTeammate(String team) {
+        for (UUID playerUUID : this.alivePlayers) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player != null && player.gameMode.getGameModeForPlayer() == GameType.SURVIVAL) {
+                PlayerStats stats = playerStats.get(playerUUID);
+                if (stats != null && team.equals(stats.getTeam())) {
+                    return player;
+                }
+            }
+        }
+        return null;
+    }
+    /**
+     * 更新所有观察者的视角目标
+     */
+    public void updateSpectatorCameras() {
+        // 遍历所有玩家，更新观察者的视角
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player != null && player.gameMode.getGameModeForPlayer() == GameType.SPECTATOR) {
+                PlayerStats stats = playerStats.get(playerUUID);
+                if (stats != null) {
+                    // 检查当前观察目标是否仍然存活
+                    Entity cameraEntity = player.getCamera();
+                    ServerPlayer currentTarget = (cameraEntity instanceof ServerPlayer) ? (ServerPlayer) cameraEntity : null;
+                    boolean targetValid = (currentTarget != null &&
+                            currentTarget.gameMode.getGameModeForPlayer() == GameType.SURVIVAL &&
+                            alivePlayers.contains(currentTarget.getUUID()));
+
+                    // 如果当前目标无效，寻找新的目标
+                    if (!targetValid) {
+                        ServerPlayer newTarget = findAliveTeammate(stats.getTeam());
+                        if (newTarget != null) {
+                            player.setCamera(newTarget);
+                        } else {
+                            // 如果找不到存活的队友，定位到最后死亡位置上方
+                            BlockPos lastDeathPos = this.lastTeammateDeathPos.get(stats.getTeam());
+                            if (lastDeathPos != null) {
+                                player.teleportTo(lastDeathPos.getX(), lastDeathPos.getY() + 10, lastDeathPos.getZ());
+                            }
+                        }
+                    }
+                }
             }
         }
     }
