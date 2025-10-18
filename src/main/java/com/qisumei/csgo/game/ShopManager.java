@@ -22,8 +22,8 @@ public class ShopManager {
 + "{buy:{id:\"minecraft:diamond\",count:48b},sell:{id:\"create:cardboard_package_10x12\",count:1b,components:{\"create:package_address\":\"\",\"create:package_contents\":[{item:{components:{\"geckolib:stack_animatable_id\":42L,\"pointblank:custom_tag\":{aim:0b,ammo:5,ammox:{},as:[{id:\"pointblank:hawk_scope\",rmv:1b}],fmid:[I;573397678,1834630192,-1285657842,-1809198908],lid:-7902711423806119341L,mid:-3352332155803909643L,sa:{scope:\"//hawk_scope\"},seed:-1941778996112074291L},\"pointblank:ts\":1759541616343L},count:1,id:\"pointblank:l96a1\"},slot:0},{item:{count:30,id:\"pointblank:ammo338lapua\"},slot:1}]}}},"
 + "{buy:{id:\"minecraft:diamond\",count:4b},sell:{id:\"pointblank:grenade\",count:1b}}]}}";
 
-    // T阵营村民（Terrorist）
-    public static final String T_VILLAGER_NBT =
+    // T阵营村民（Terrorist
+public static final String T_VILLAGER_NBT =
 "{NoAI:1b,Silent:1b,Invulnerable:1b,PersistenceRequired:1b,"
 + "VillagerData:{profession:\"minecraft:toolsmith\",level:5,type:\"minecraft:plains\"},"
 + "Offers:{Recipes:["
