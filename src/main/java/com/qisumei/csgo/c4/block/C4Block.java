@@ -67,39 +67,44 @@ public class C4Block extends Block {
     }
 
     /**
-     * 获取玩家破坏该方块的进度速度
-     * 只有CT队伍的玩家才能拆除C4，使用剪刀可以加快拆除速度
+     * 获取玩家破坏该方块的进度速度。
+     * [核心修正] 移除了错误的 "instanceof Level" 检查，并整合了权限判断。
      * @param state 方块状态对象
      * @param player 正在破坏方块的玩家对象
      * @param world 方块访问器接口
      * @param pos 方块位置坐标
-     * @return 返回破坏进度速度，0.0表示无法破坏
+     * @return 返回破坏进度速度，0.0f 表示无法破坏
      */
     @Override
     public float getDestroyProgress(@Nonnull BlockState state, @Nonnull Player player, @Nonnull BlockGetter world, @Nonnull BlockPos pos) {
-        if (world instanceof Level level) {
-            if (level.isClientSide() || !(player instanceof ServerPlayer sp)) {
-                return 0.0f;
-            }
-
-            Match match = MatchManager.getPlayerMatch(sp);
-            if (match == null) {
-                return 0.0f;
-            }
-
-            PlayerStats stats = match.getPlayerStats().get(player.getUUID());
-            if (stats == null || !"CT".equals(stats.getTeam())) {
-                return 0.0f;
-            }
-
-            float baseSpeed = super.getDestroyProgress(state, player, world, pos);
-
-            if (player.getMainHandItem().is(Items.SHEARS)) {
-                return baseSpeed * 2.0f;
-            }
-
-            return baseSpeed;
+        // 首先，确保玩家是服务端玩家，否则不允许破坏
+        if (!(player instanceof ServerPlayer sp)) {
+            return 0.0f;
         }
-        return 0.0f;
+
+        // 检查玩家是否在比赛中
+        Match match = MatchManager.getPlayerMatch(sp);
+        if (match == null) {
+            return 0.0f;
+        }
+
+        // 检查玩家是否为 CT 阵营
+        PlayerStats stats = match.getPlayerStats().get(player.getUUID());
+        if (stats == null || !"CT".equals(stats.getTeam())) {
+            return 0.0f; // 如果不是CT，则无法破坏
+        }
+
+        // --- 如果所有检查都通过，则计算破坏速度 ---
+
+        // 获取基础破坏速度（取决于方块硬度和玩家状态）
+        float baseSpeed = super.getDestroyProgress(state, player, world, pos);
+
+        // 如果玩家手持剪刀（拆弹器），则速度加倍
+        if (player.getMainHandItem().is(Items.SHEARS)) {
+            return baseSpeed * 2.0f;
+        }
+
+        // 返回计算出的速度
+        return baseSpeed;
     }
 }
