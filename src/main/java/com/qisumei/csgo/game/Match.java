@@ -7,9 +7,7 @@ import com.qisumei.csgo.util.ItemNBTHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import com.qisumei.csgo.game.preset.MatchPreset;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -19,13 +17,10 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.scores.DisplaySlot;
 import net.minecraft.world.scores.Objective;
-import net.minecraft.world.scores.Score;
 import net.minecraft.world.scores.Scoreboard;
-import net.minecraft.world.scores.ScoreHolder;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class Match {
 
@@ -210,9 +205,9 @@ public class Match {
         }
         
         // 如果有一方没有任何生存模式玩家，则结束回合
-        if (this.alivePlayers.size() > 0 && survivalCtCount == 0 && survivalTCount > 0) {
+        if (!this.alivePlayers.isEmpty()&& survivalCtCount == 0 && survivalTCount > 0) {
             endRound("T", "所有CT玩家死亡");
-        } else if (this.alivePlayers.size() > 0 && survivalTCount == 0 && survivalCtCount > 0) {
+        } else if (!this.alivePlayers.isEmpty() && survivalTCount == 0 && survivalCtCount > 0) {
             endRound("CT", "所有T玩家死亡");
         }
     }
@@ -331,7 +326,7 @@ public class Match {
             .filter(e -> "T".equals(e.getValue().getTeam()))
             .map(e -> server.getPlayerList().getPlayer(e.getKey()))
             .filter(Objects::nonNull)
-            .collect(Collectors.toList());
+            .toList();
 
         if (!tPlayers.isEmpty()) {
             ServerPlayer c4Carrier = tPlayers.get(new Random().nextInt(tPlayers.size()));
@@ -620,7 +615,7 @@ public class Match {
             .sorted(Comparator.comparingInt((Map.Entry<UUID, PlayerStats> e) -> e.getValue().getKills()).reversed()
             .thenComparingInt(e -> e.getValue().getDeaths()))
             .limit(15)
-            .collect(Collectors.toList());
+            .toList();
 
         for (Map.Entry<UUID, PlayerStats> entry : sortedPlayers) {
             ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
