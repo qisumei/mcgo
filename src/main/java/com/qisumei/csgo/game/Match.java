@@ -190,7 +190,10 @@ public class Match {
         
         // 6. [顺序调整] 在装备发放完毕后，再处理经济，发放金钱
         distributeRoundIncome();
-
+        
+        // 在发放金钱后，生成商店村民
+        spawnShops();
+        
         // 7. 为所有玩家添加购买阶段的无敌和减速效果
         int resistanceDuration = ServerConfig.buyPhaseSeconds * 20;
         for (UUID playerUUID : playerStats.keySet()) {

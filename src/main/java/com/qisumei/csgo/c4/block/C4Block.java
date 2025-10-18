@@ -4,6 +4,7 @@ import com.qisumei.csgo.game.Match;
 import com.qisumei.csgo.game.MatchManager;
 import com.qisumei.csgo.game.PlayerStats;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Items;
@@ -16,6 +17,9 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 import javax.annotation.Nonnull;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * C4方块类，继承自Block类
@@ -23,6 +27,15 @@ import javax.annotation.Nonnull;
  */
 public class C4Block extends Block {
     private static final VoxelShape C4_SHAPE = Block.box(0, 0, 0, 15, 5, 12);
+
+    // --- 新增：C4拆除逻辑相关常量和静态变量 ---
+    /** 徒手拆除C4所需的时间（单位：ticks） */
+    private static final int DEFUSE_TIME_HAND_TICKS = 6 * 20; // 6秒
+    /** 使用剪刀拆除C4所需的时间（单位：ticks） */
+    private static final int DEFUSE_TIME_SHEARS_TICKS = 3 * 20; // 3秒
+
+    /** 用于跟踪每个玩家拆除进度的Map */
+    private static final Map<UUID, Integer> defuseProgress = new HashMap<>();
 
     /**
      * 构造函数，创建一个新的C4方块实例
@@ -62,49 +75,67 @@ public class C4Block extends Block {
             if (match != null) {
                 match.onC4Defused();
             }
+            // 无论如何，当方块被移除时，清空所有人的拆除进度
+            defuseProgress.clear();
         }
         super.onRemove(state, world, pos, newState, moved);
     }
 
     /**
      * 获取玩家破坏该方块的进度速度。
-     * [核心修正] 移除了错误的 "instanceof Level" 检查，并整合了权限判断。
+     * [核心修正] 此方法现在处理C4的拆除逻辑，而不是简单的方块破坏。
      * @param state 方块状态对象
      * @param player 正在破坏方块的玩家对象
      * @param world 方块访问器接口
      * @param pos 方块位置坐标
-     * @return 返回破坏进度速度，0.0f 表示无法破坏
+     * @return 返回拆除进度速度，0.0f 表示无法拆除
      */
     @Override
     public float getDestroyProgress(@Nonnull BlockState state, @Nonnull Player player, @Nonnull BlockGetter world, @Nonnull BlockPos pos) {
-        // 首先，确保玩家是服务端玩家，否则不允许破坏
+        // 必须是服务端玩家
         if (!(player instanceof ServerPlayer sp)) {
             return 0.0f;
         }
 
-        // 检查玩家是否在比赛中
+        // 玩家必须处于下蹲状态
+        if (!player.isCrouching()) {
+            // 如果玩家停止下蹲，则重置其拆除进度并阻止拆除
+            defuseProgress.remove(player.getUUID());
+            return 0.0f;
+        }
+
+        // 检查玩家是否在比赛中且为 CT 阵营
         Match match = MatchManager.getPlayerMatch(sp);
         if (match == null) {
             return 0.0f;
         }
-
-        // 检查玩家是否为 CT 阵营
         PlayerStats stats = match.getPlayerStats().get(player.getUUID());
         if (stats == null || !"CT".equals(stats.getTeam())) {
-            return 0.0f; // 如果不是CT，则无法破坏
+            return 0.0f; // 只有 CT 才能拆除
         }
 
-        // --- 如果所有检查都通过，则计算破坏速度 ---
+        // 根据是否手持剪刀确定总拆除时间
+        boolean hasShears = player.getMainHandItem().is(Items.SHEARS);
+        int totalDefuseTicks = hasShears ? DEFUSE_TIME_SHEARS_TICKS : DEFUSE_TIME_HAND_TICKS;
 
-        // 获取基础破坏速度（取决于方块硬度和玩家状态）
-        float baseSpeed = super.getDestroyProgress(state, player, world, pos);
+        // 更新并获取当前玩家的拆除进度
+        int currentProgress = defuseProgress.getOrDefault(player.getUUID(), 0) + 1;
+        defuseProgress.put(player.getUUID(), currentProgress);
 
-        // 如果玩家手持剪刀（拆弹器），则速度加倍
-        if (player.getMainHandItem().is(Items.SHEARS)) {
-            return baseSpeed * 2.0f;
+        // 清理其他正在尝试拆除的玩家的进度
+        defuseProgress.keySet().removeIf(uuid -> !uuid.equals(player.getUUID()));
+
+        // 计算并发送进度条到玩家的快捷栏上方(Action Bar)
+        int percentage = (int) (((float)currentProgress / totalDefuseTicks) * 100);
+        sp.sendSystemMessage(Component.literal("拆除中... " + Math.min(percentage, 100) + "%"), true);
+
+        // 当进度达到或超过总时间时，方块会被游戏引擎自动破坏
+        if (currentProgress >= totalDefuseTicks) {
+            // 拆除成功后，清空该玩家的进度记录
+            defuseProgress.remove(player.getUUID());
         }
 
-        // 返回计算出的速度
-        return baseSpeed;
+        // 返回每 tick 的进度增量。当累计增量达到 1.0f 时，方块会被破坏。
+        return 1.0f / totalDefuseTicks;
     }
 }
