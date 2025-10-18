@@ -171,15 +171,17 @@ public class CSCommand {
             source.sendSuccess(() -> Component.literal("比赛 '" + name + "' 已创建！最大人数: " + maxPlayers), true);
         }
 
-        executeServerCommand(source, "team add " + match.getCtTeamName() + " '{\"text\":\"Counter-Terrorists\"}'");
+        executeServerCommand(source, "team add " + match.getCtTeamName() + " {\"text\":\"Counter-Terrorists\"}");
         executeServerCommand(source, "team modify " + match.getCtTeamName() + " color blue");
         executeServerCommand(source, "team modify " + match.getCtTeamName() + " friendlyFire " + ServerConfig.friendlyFireEnabled);
         executeServerCommand(source, "team modify " + match.getCtTeamName() + " nametagVisibility hideForOtherTeams");
+        executeServerCommand(source, "team modify " + match.getCtTeamName() + " seeFriendlyInvisibles true");
 
-        executeServerCommand(source, "team add " + match.getTTeamName() + " '{\"text\":\"Terrorists\"}'");
+        executeServerCommand(source, "team add " + match.getTTeamName() + " {\"text\":\"Terrorists\"}");
         executeServerCommand(source, "team modify " + match.getTTeamName() + " color gold");
         executeServerCommand(source, "team modify " + match.getTTeamName() + " friendlyFire " + ServerConfig.friendlyFireEnabled);
         executeServerCommand(source, "team modify " + match.getTTeamName() + " nametagVisibility hideForOtherTeams");
+        executeServerCommand(source, "team modify " + match.getTTeamName() + " seeFriendlyInvisibles true");
 
         return 1;
     }
