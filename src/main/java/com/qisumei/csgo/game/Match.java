@@ -24,7 +24,6 @@ import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Match类，管理一场CSGO比赛的整个生命周期和所有核心逻辑。
@@ -739,6 +738,7 @@ public class Match {
             .sorted(Comparator.comparingInt((Map.Entry<UUID, PlayerStats> e) -> e.getValue().getKills()).reversed()
             .thenComparingInt(e -> e.getValue().getDeaths()))
             .limit(15)
+            .toList();
             .toList();
 
         for (Map.Entry<UUID, PlayerStats> entry : sortedPlayers) {
