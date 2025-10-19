@@ -1042,9 +1042,16 @@ public class Match {
      * 当C4被拆除时调用。
      */
     public void onC4Defused() {
-        //  ：移除所有正在拆弹的玩家记录
-        defusingPlayers.clear();
-        endRound("CT", "炸弹已被拆除");
+        if (this.roundState == RoundState.IN_PROGRESS) {
+            // 关键修复：停止C4的倒计时！
+            c4CountdownHandler.stop();
+            
+            // 清理正在拆弹的玩家记录
+            defusingPlayers.clear();
+            
+            // 宣布CT胜利并结束回合
+            endRound("CT", "炸弹已被拆除");
+        }
     }
 
     /**
