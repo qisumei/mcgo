@@ -252,6 +252,11 @@ public class Match {
         // 更新C4倒计时器
         c4CountdownHandler.tick();
 
+        //购买阶段区域限制逻辑
+        if (roundState == RoundState.BUY_PHASE) {
+            checkPlayerBuyZone();
+        }
+
         // 处理主计时器
         if (tickCounter > 0) {
             tickCounter--;
@@ -268,7 +273,6 @@ public class Match {
                 }
             }
         }
-
         // 在每秒的 tick 中，更新计分板
         if (server.getTickCount() % 20 == 0) {
             updateScoreboard(); // 每秒更新计分板
@@ -280,6 +284,41 @@ public class Match {
         // 每一tick都更新Boss栏，以保证进度条平滑
         updateBossBar();
     }
+
+    /**
+     * 在购买阶段检查玩家是否超出购买区域，如果超出则传送回出生点。
+     */
+    private void checkPlayerBuyZone() {
+        final double maxDistance = 10.0; // 最大允许距离
+        Random random = new Random();
+
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player == null) continue;
+
+            PlayerStats stats = playerStats.get(playerUUID);
+            if (stats == null) continue;
+
+            String team = stats.getTeam();
+            BlockPos shopPos = "CT".equals(team) ? ctShopPos : tShopPos;
+            List<BlockPos> spawns = "CT".equals(team) ? ctSpawns : tSpawns;
+
+            // 如果商店或出生点未设置，则跳过此玩家的检查
+            if (shopPos == null || spawns.isEmpty()) continue;
+
+            // 计算玩家与商店的水平距离
+            double distance = Math.sqrt(player.distanceToSqr(shopPos.getX() + 0.5, player.getY(), shopPos.getZ() + 0.5));
+
+            if (distance > maxDistance) {
+                // 如果超出距离，则传送回一个随机的出生点
+                BlockPos spawnPos = spawns.get(random.nextInt(spawns.size()));
+                player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, player.getYRot(), player.getXRot());
+                // 给予玩家提示
+                player.sendSystemMessage(Component.literal("购买阶段请不要离开购买区域！").withStyle(ChatFormatting.RED), true);
+            }
+        }
+    }
+
     /**
      * 在半场时交换双方队伍。
      */
