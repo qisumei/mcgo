@@ -4,6 +4,7 @@
   "block.qiscsgo.c4": "C4",
   "subtitles.qiscsgo.tw": "T Win",
   "subtitles.qiscsgo.c4_place": "Bomb has been planted",
-  "subtitles.qiscsgo.ctw": "CT Win"
-  
+  "subtitles.qiscsgo.ctw": "CT Win",
+  "key.qiscsgo.open_shop": "Open Shop",
+  "category.qiscsgo.csgo": "CSGO Mod"
 }

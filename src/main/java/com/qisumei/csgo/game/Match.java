@@ -1545,12 +1545,9 @@ public class Match {
         ));
 
         // 检查光线追踪是否击中了方块，并且击中的位置是否就是C4的位置
-        if (hitResult.getType() != HitResult.Type.BLOCK || !hitResult.getBlockPos().equals(this.c4Pos)) {
-            return false;
-        }
+        return hitResult.getType() == HitResult.Type.BLOCK && hitResult.getBlockPos().equals(this.c4Pos);
 
         // 所有条件都满足
-        return true;
     }
 
     /**
