@@ -344,7 +344,7 @@ public class Match {
             player.getFoodData().setFoodLevel(20);
             player.removeAllEffects();
             
-            player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, (ServerConfig.buyPhaseSeconds * 20) + 10, 255, false, false, false));
+            //player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, (ServerConfig.buyPhaseSeconds * 20) + 10, 255, false, false, false));
             player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, ServerConfig.buyPhaseSeconds * 20, 4, false, false, true));
 
             List<BlockPos> spawns = "CT".equals(team) ? ctSpawns : tSpawns;
@@ -443,9 +443,32 @@ public class Match {
     private void beginRoundInProgress() {
         this.roundState = RoundState.IN_PROGRESS;
         this.tickCounter = this.roundTimeSeconds * 20;
+
+        //传送逻辑防止昂德皮偷跑
+        Random random = new Random();
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player == null) continue;
+
+            // 移除购买阶段的缓慢效果
+            //player.removeEffect(MobEffects.MOVEMENT_SLOWDOWN);
+
+            PlayerStats stats = getPlayerStats().get(playerUUID);
+            if (stats == null) continue;
+
+            // 根据玩家队伍获取相应的出生点列表
+            String team = stats.getTeam();
+            List<BlockPos> spawns = "CT".equals(team) ? ctSpawns : tSpawns;
+            
+            // 如果出生点列表不为空，则随机选择一个位置进行传送
+            if (!spawns.isEmpty()) {
+                BlockPos spawnPos = spawns.get(random.nextInt(spawns.size()));
+                player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, player.getYRot(), player.getXRot());
+            }
+        }
         
         recordAllPlayerGear();
-
+        
         broadcastToAllPlayersInMatch(Component.literal("战斗开始！"));
         QisCSGO.LOGGER.info("比赛 '{}': 进入战斗阶段。", name);
         removeShops();

@@ -22,6 +22,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.AABB;
 
 import java.util.List;
@@ -395,6 +396,26 @@ public class CSCommand {
         }
         executeServerCommand(source, "team leave " + playerToKick.getName().getString());
         match.removePlayer(playerToKick);
+
+        //重置玩家状态并传送的逻辑 ---
+        
+        // 1. 恢复为生存模式
+        playerToKick.setGameMode(GameType.SURVIVAL);
+        
+        // 2. 移除所有药水效果
+        playerToKick.removeAllEffects();
+        
+        // 3. 重置击退抗性
+        String attributeCmd = "attribute " + playerToKick.getName().getString() + " minecraft:generic.knockback_resistance base set 0.0";
+        source.getServer().getCommands().performPrefixedCommand(source.getServer().createCommandSourceStack(), attributeCmd);
+        
+        // 4. 清空背包
+        playerToKick.getInventory().clearContent();
+        
+        // 5. 传送到主世界出生点
+        BlockPos spawnPos = source.getServer().overworld().getSharedSpawnPos();
+        playerToKick.teleportTo(source.getServer().overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 0, 0);
+
         source.sendSuccess(() -> Component.literal("已将玩家 " + playerToKick.getName().getString() + " 移出比赛 '" + matchName + "'。"), true);
         playerToKick.sendSystemMessage(Component.literal("你已被管理员移出比赛。").withStyle(ChatFormatting.RED));
         return 1;
