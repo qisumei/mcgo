@@ -198,9 +198,9 @@ public class ServerConfig {
 
         // 初始装备配置项
         BUILDER.push("Initial Gear");
-        CT_PISTOL_ROUND_GEAR_SPEC = BUILDER.comment("CT方在手枪局获得的初始装备列表").defineList("ctPistolRoundGear", List.of("pointblank:a1_hkusp45"), obj -> obj instanceof String);
-        T_PISTOL_ROUND_GEAR_SPEC = BUILDER.comment("T方在手枪局获得的初始装备列表").defineList("tPistolRoundGear", List.of("pointblank:a1_g17"), obj -> obj instanceof String);
-        INVENTORY_PROTECTED_ITEMS_SPEC = BUILDER.comment("在回合开始清理背包时, 不会被清除的物品ID列表 (如货币, 护甲等)").defineList("inventoryProtectedItems", List.of("minecraft:diamond", "minecraft:iron_helmet", "minecraft:iron_chestplate"), obj -> obj instanceof String);
+        CT_PISTOL_ROUND_GEAR_SPEC = BUILDER.comment("CT方在手枪局获得的初始装备列表").defineList("ctPistolRoundGear", List.of("minecraft:iron_sword[minecraft:enchantments={levels:{\"minecraft:sharpness\":27}},minecraft:unbreakable={}]"), obj -> obj instanceof String);
+        T_PISTOL_ROUND_GEAR_SPEC = BUILDER.comment("T方在手枪局获得的初始装备列表").defineList("tPistolRoundGear", List.of("minecraft:iron_sword[minecraft:enchantments={levels:{\"minecraft:sharpness\":27}},minecraft:unbreakable={}]"), obj -> obj instanceof String);
+        INVENTORY_PROTECTED_ITEMS_SPEC = BUILDER.comment("在回合开始清理背包时, 不会被清除的物品ID列表 (如货币, 护甲等)").defineList("inventoryProtectedItems", List.of("minecraft:diamond", "minecraft:iron_helmet", "minecraft:iron_chestplate", "minecraft:iron_sword"), obj -> obj instanceof String);
         BUILDER.pop();
 
         // 武器类别映射配置项

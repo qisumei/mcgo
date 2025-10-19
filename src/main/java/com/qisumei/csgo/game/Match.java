@@ -653,6 +653,8 @@ public class Match {
                 player.removeAllEffects();
                 // 重置击退抗性
                 setPlayerKnockbackResistance(player, 0.0);
+                //清空玩家背包
+                player.getInventory().clearContent();
                 // 传送玩家
                 player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 0, 0);
             }

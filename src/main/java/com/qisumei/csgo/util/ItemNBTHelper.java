@@ -10,35 +10,58 @@ import net.minecraft.world.item.ItemStack;
 public class ItemNBTHelper {
 
     /**
-     * 将一个 ItemStack (包括其NBT) 转换为可用于配置和命令的字符串.
+     * 将一个 ItemStack (包括其NBT) 转换为可用于配置和命令的字符串。
      * @param stack 要转换的物品
      * @param registries 注册表访问器，用于序列化
-     * @return 格式为 "minecraft:item_id{nbt...}" 的字符串
+     * @return 格式为 "minecraft:item_id[component=value,...]" 的字符串
      */
     public static String itemStackToString(ItemStack stack, HolderLookup.Provider registries) {
         if (stack.isEmpty()) {
             return "";
         }
+        // 1. 获取物品的ID
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
-        
-        // --- 修正 #1: 安全地处理返回的 Tag 类型 ---
+        if (id == null) {
+            return "";
+        }
+
+        // 2. 将物品栈保存为完整的NBT标签
         Tag rawTag = stack.save(registries);
         if (!(rawTag instanceof CompoundTag tag)) {
-            // 如果返回的不是CompoundTag (正常情况不会发生)，则只返回物品ID
-            return id != null ? id.toString() : "";
-        }
-        
-        // 移除一些不需要保存的基础数据
-        tag.remove("id");
-        tag.remove("Count");
-        
-        if (tag.isEmpty()) {
             return id.toString();
         }
-        
-        return id + tag.toString();
-    }
 
+        // 3. 检查并获取 "components" 标签
+        if (tag.contains("components", Tag.TAG_COMPOUND)) {
+            CompoundTag components = tag.getCompound("components");
+
+            if (components.isEmpty()) {
+                return id.toString();
+            }
+
+            // 4. [核心修正] 手动构建组件字符串以匹配 `key=value` 格式
+            StringBuilder componentsBuilder = new StringBuilder();
+            boolean first = true;
+            for (String key : components.getAllKeys()) {
+                if (!first) {
+                    componentsBuilder.append(',');
+                }
+                // 获取组件的值，并使用 getAsString() 转换为紧凑字符串
+                Tag componentValue = components.get(key);
+                String valueString = componentValue != null ? componentValue.getAsString() : "{}";
+
+                // 拼接 "key=value" 格式，注意 key 是没有引号的
+                componentsBuilder.append(key).append('=').append(valueString);
+                first = false;
+            }
+            
+            // 5. 按照 `item_id[components]` 格式进行最终拼接
+            return id + "[" + componentsBuilder.toString() + "]";
+        }
+
+        // 如果物品没有任何组件，则只返回物品ID
+        return id.toString();
+    }
     /**
      * 检查一个 ItemStack 的 ID 是否匹配一个可能带NBT的配置字符串 (忽略NBT).
      * @param stack 要检查的物品
