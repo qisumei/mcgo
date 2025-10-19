@@ -26,6 +26,10 @@ import net.minecraft.world.scores.Objective;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -1047,11 +1051,36 @@ public class Match {
      * 当C4爆炸时调用。
      */
     public void onC4Exploded() {
-        if (c4Pos != null) {
-            server.overworld().explode(null, c4Pos.getX() + 0.5, c4Pos.getY() + 0.5, c4Pos.getZ() + 0.5, 20.0f, false, net.minecraft.world.level.Level.ExplosionInteraction.BLOCK);
-        }
-        endRound("T", "炸弹已爆炸");
+    if (c4Pos != null) {
+        // --- 1. 应用自定义伤害 ---
+        applyCustomExplosionDamage();
+
+        // --- 2. 播放声音和粒子效果 ---
+        double x = c4Pos.getX() + 0.5;
+        double y = c4Pos.getY() + 0.5;
+        double z = c4Pos.getZ() + 0.5;
+
+        server.overworld().playSound(
+                null,
+                c4Pos,
+                SoundEvents.GENERIC_EXPLODE.value(), // ✅ 取出实际 SoundEvent
+                SoundSource.BLOCKS,
+                4.0F,
+                (1.0F + (server.overworld().random.nextFloat() - server.overworld().random.nextFloat()) * 0.2F) * 0.7F
+        );
+
+        server.overworld().sendParticles(
+                ParticleTypes.EXPLOSION_EMITTER,
+                x, y, z,
+                2,
+                1.0, 1.0, 1.0,
+                0.0
+        );
     }
+
+    // 结束回合
+    endRound("T", "炸弹已爆炸");
+}
     
     /**
      * 在新回合开始时重置C4的状态。
@@ -1093,6 +1122,40 @@ public class Match {
             ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
             if (player != null) {
                 player.sendSystemMessage(message, false);
+            }
+        }
+    }
+
+    /**
+     * 应用自定义的C4爆炸伤害，使用 genericKill 伤害源以避免任何爆炸相关的副作用。
+     */
+    private void applyCustomExplosionDamage() {
+        if (c4Pos == null) return;
+
+        final double explosionRadius = 16.0;
+        final float maxDamage = 100.0f;
+
+        double explosionX = c4Pos.getX() + 0.5;
+        double explosionY = c4Pos.getY() + 0.5;
+        double explosionZ = c4Pos.getZ() + 0.5;
+
+        // 使用一个不会触发额外逻辑的通用伤害源
+        DamageSource damageSource = server.overworld().damageSources().genericKill();
+
+        for (UUID playerUUID : alivePlayers) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player == null) continue;
+
+            double distanceSq = player.distanceToSqr(explosionX, explosionY, explosionZ);
+
+            if (distanceSq < explosionRadius * explosionRadius) {
+                double distance = Math.sqrt(distanceSq);
+                float damageFalloff = (float) (1.0 - distance / explosionRadius);
+                float damageToApply = maxDamage * damageFalloff;
+
+                if (damageToApply > 0) {
+                    player.hurt(damageSource, damageToApply);
+                }
             }
         }
     }
