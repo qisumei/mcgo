@@ -348,12 +348,14 @@ public class Match {
             String oldTeam = stats.getTeam();
             String newTeam = "CT".equals(oldTeam) ? "T" : "CT";
             stats.setTeam(newTeam);
+            
 
             ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
             if (player != null) {
                 String newTeamName = "CT".equals(newTeam) ? getCtTeamName() : getTTeamName();
                 server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team leave " + player.getName().getString());
                 server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team join " + newTeamName + " " + player.getName().getString());
+                performSelectiveClear(player);
                 player.sendSystemMessage(Component.literal("你现在是 " + ("CT".equals(newTeam) ? "反恐精英 (CT)" : "恐怖分子 (T)") + " 队的一员！").withStyle(ChatFormatting.AQUA));
             }
         }
