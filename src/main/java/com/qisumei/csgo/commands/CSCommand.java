@@ -27,6 +27,8 @@ import net.minecraft.world.phys.AABB;
 
 import java.util.List;
 import java.util.Random;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * CSCommand 类用于注册和处理与CSGO比赛相关的命令。
@@ -142,6 +144,18 @@ public class CSCommand {
                 .then(Commands.argument("name", StringArgumentType.string())
                    .executes(CSCommand::joinMatch)
 
+                )
+            )
+
+            // --- watch 命令 ---
+            .then(Commands.literal("watch")
+                .then(Commands.argument("name", StringArgumentType.string())
+                    // -> /cs watch <比赛名称>
+                    .executes(CSCommand::watchMatch)
+                    // -> /cs watch <比赛名称> quit
+                    .then(Commands.literal("quit")
+                        .executes(CSCommand::unwatchMatch)
+                    )
                 )
             )
         );
@@ -635,6 +649,60 @@ public class CSCommand {
         executeServerCommand(source, "team remove " + match.getTTeamName());
 
         source.sendSuccess(() -> Component.literal("已强制结束并清理了比赛 '" + matchName + "'。"), true);
+        return 1;
+    }
+
+    /**
+     * 处理 /cs watch <比赛名称> 命令的逻辑。
+     */
+    private static int watchMatch(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
+        ServerPlayer spectator = source.getPlayerOrException();
+        String matchName = StringArgumentType.getString(context, "name");
+        Match match = MatchManager.getMatch(matchName);
+
+        if (match == null) {
+            source.sendFailure(Component.literal("错误：未找到名为 '" + matchName + "' 的比赛。"));
+            return 0;
+        }
+
+        // 获取比赛中所有存活的玩家
+        List<ServerPlayer> alivePlayers = match.getAlivePlayers().stream()
+            .map(uuid -> source.getServer().getPlayerList().getPlayer(uuid))
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+
+        if (alivePlayers.isEmpty()) {
+            source.sendFailure(Component.literal("错误：比赛 '" + matchName + "' 中当前没有可观战的存活玩家。"));
+            return 0;
+        }
+
+        // 随机选择一个玩家进行观战
+        ServerPlayer target = alivePlayers.get(new Random().nextInt(alivePlayers.size()));
+
+        // 将自己设置为观察者模式并附身到目标玩家
+        spectator.setGameMode(GameType.SPECTATOR);
+        spectator.setCamera(target);
+
+        source.sendSuccess(() -> Component.literal("你现在正在观战比赛 '").append(matchName).append("'. 正在跟随玩家 ").append(target.getDisplayName()), false);
+        return 1;
+    }
+
+    /**
+     * 处理 /cs watch <比赛名称> quit 命令的逻辑。
+     */
+    private static int unwatchMatch(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
+        ServerPlayer spectator = source.getPlayerOrException();
+
+        // 恢复为生存模式
+        spectator.setGameMode(GameType.SURVIVAL);
+
+        // 传送到主世界出生点
+        BlockPos spawnPos = source.getServer().overworld().getSharedSpawnPos();
+        spectator.teleportTo(source.getServer().overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 0, 0);
+
+        source.sendSuccess(() -> Component.literal("你已退出观战模式。"), false);
         return 1;
     }
 }

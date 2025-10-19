@@ -1426,6 +1426,13 @@ public class Match {
             broadcastToAllPlayersInMatch(Component.literal("§b" + player.getName().getString() + " §f已经拆除了炸弹！"));
         }
     }
+    /**
+     *获取当前回合所有存活玩家的UUID集合。
+     * @return 一个包含存活玩家UUID的Set。
+     */
+    public Set<UUID> getAlivePlayers() {
+        return this.alivePlayers;
+    }
     
 }
 
