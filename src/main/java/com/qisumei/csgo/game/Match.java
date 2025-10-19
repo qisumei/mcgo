@@ -189,7 +189,29 @@ public class Match {
         if (this.currentRound == (this.totalRounds / 2) + 1) {
             swapTeams();
         }
-        
+        //给玩家广播当前比分
+        String titleJson = String.format(
+            "[{\"text\":\"CT \",\"color\":\"blue\"},{\"text\":\"%d - %d\",\"color\":\"white\"},{\"text\":\" T\",\"color\":\"gold\"}]",
+            ctScore, tScore
+        );
+        // 遍历比赛中的所有玩家
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            // 确保玩家在线
+            if (player != null) {
+                // 为该玩家单独执行title命令
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "title " + player.getName().getString() + " title " + titleJson);
+            }
+        }
+
+        //全局聊天广播比分
+        String chatJson = String.format(
+            "[{\"text\":\"%s：\",\"color\":\"yellow\"},{\"text\":\"CT \",\"color\":\"blue\"},{\"text\":\"%d:%d\",\"color\":\"white\",\"bold\":true},{\"text\":\" T\",\"color\":\"gold\"}]",
+            this.name, ctScore, tScore
+        );
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "tellraw @a " + chatJson);
+
+
         // 4. 设置回合状态为购买阶段
         this.roundState = RoundState.BUY_PHASE;
         this.tickCounter = ServerConfig.buyPhaseSeconds * 20;
@@ -263,6 +285,9 @@ public class Match {
      */
     private void swapTeams() {
         broadcastToAllPlayersInMatch(Component.literal("半场换边！队伍已交换。").withStyle(ChatFormatting.YELLOW));
+        int tempScore = this.ctScore;
+        this.ctScore = this.tScore;
+        this.tScore = tempScore;
         for (Map.Entry<UUID, PlayerStats> entry : playerStats.entrySet()) {
             PlayerStats stats = entry.getValue();
             String oldTeam = stats.getTeam();
@@ -527,6 +552,114 @@ public class Match {
     }
 
     /**
+     * [核心修改] 根据击杀数（主要）和死亡数（次要，越少越好）获取指定队伍的顶尖玩家列表。
+     * @param team 要查找的队伍 ("CT" 或 "T")。
+     * @param limit 返回的玩家数量上限。
+     * @return 包含玩家UUID和其统计数据的有序列表。
+     */
+    private List<Map.Entry<UUID, PlayerStats>> getRankedPlayers(String team, int limit) {
+        return playerStats.entrySet().stream()
+            .filter(entry -> team.equals(entry.getValue().getTeam()))
+            .sorted(Comparator.comparingInt((Map.Entry<UUID, PlayerStats> e) -> e.getValue().getKills())
+                          .reversed()
+                          .thenComparingInt(e -> e.getValue().getDeaths()))
+            .limit(limit)
+            .toList();
+    }
+    /**
+     * 查找并以特定格式广播比赛结束时的统计数据。
+     */
+    private void broadcastEndGameStats() {
+        // --- 用于格式化的常量 ---
+        final String SEPARATOR = "============================";
+        final String COLUMN_SPACER = "           ";
+        final int NAME_PADDING = 12; // 为玩家名字保留的字符宽度
+
+        // 获取双方队伍排名前3的玩家
+        List<Map.Entry<UUID, PlayerStats>> topCtPlayers = getRankedPlayers("CT", 3);
+        List<Map.Entry<UUID, PlayerStats>> topTPlayers = getRankedPlayers("T", 3);
+
+        // --- 开始广播 ---
+        broadcastToAllPlayersInMatch(Component.literal("")); // 发送空行
+        broadcastToAllPlayersInMatch(Component.literal(SEPARATOR).withStyle(ChatFormatting.GOLD));
+
+        // --- 比分行 ---
+        String scoreText = "                本场比分: " + ctScore + ":" + tScore;
+        broadcastToAllPlayersInMatch(Component.literal(scoreText).withStyle(ChatFormatting.WHITE, ChatFormatting.BOLD));
+
+        // --- 标题行 ---
+        Component header = Component.literal("CT击杀数排名").withStyle(ChatFormatting.BLUE)
+            .append(Component.literal(COLUMN_SPACER))
+            .append(Component.literal("T击杀数排名").withStyle(ChatFormatting.GOLD));
+        broadcastToAllPlayersInMatch(header);
+
+        // --- 玩家数据行 ---
+        int maxRows = Math.max(topCtPlayers.size(), topTPlayers.size());
+        if (maxRows == 0) {
+             broadcastToAllPlayersInMatch(Component.literal("本场比赛没有玩家数据。").withStyle(ChatFormatting.GRAY));
+        }
+
+        for (int i = 0; i < maxRows; i++) {
+            // 左侧 (CT)
+            String ctPlayerLine = "";
+            if (i < topCtPlayers.size()) {
+                Map.Entry<UUID, PlayerStats> entry = topCtPlayers.get(i);
+                ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+                if (player != null) {
+                    // 格式化字符串，使用 String.format 来补齐空格，以尽量对齐
+                    ctPlayerLine = String.format("%-" + NAME_PADDING + "." + NAME_PADDING + "s  %d", 
+                                                 player.getName().getString(), 
+                                                 entry.getValue().getKills());
+                }
+            }
+
+            // 右侧 (T)
+            String tPlayerLine = "";
+            if (i < topTPlayers.size()) {
+                Map.Entry<UUID, PlayerStats> entry = topTPlayers.get(i);
+                ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+                if (player != null) {
+                    tPlayerLine = String.format("%-" + NAME_PADDING + "." + NAME_PADDING + "s  %d", 
+                                                player.getName().getString(), 
+                                                entry.getValue().getKills());
+                }
+            }
+            
+            // 组合成一行并发送
+            // 为了对齐，我们需要计算左侧字符串占用的实际宽度，但这在MC中很难做到。
+            // 我们用一个固定的宽度来尝试对齐。
+            String leftPadded = String.format("%-18s", ctPlayerLine);
+            Component fullLine = Component.literal(leftPadded).withStyle(ChatFormatting.WHITE)
+                                    .append(Component.literal(tPlayerLine).withStyle(ChatFormatting.WHITE));
+
+            broadcastToAllPlayersInMatch(fullLine);
+        }
+
+        broadcastToAllPlayersInMatch(Component.literal(SEPARATOR).withStyle(ChatFormatting.GOLD));
+    }
+    /**
+     * 比赛结束后，重置所有玩家状态并将其传送至世界出生点。
+     */
+    private void resetAndTeleportPlayers() {
+        // 获取主世界的出生点坐标
+        BlockPos spawnPos = server.overworld().getSharedSpawnPos();
+
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player != null) {
+                // 设置为生存模式
+                player.setGameMode(GameType.SURVIVAL);
+                // 移除所有药水效果
+                player.removeAllEffects();
+                // 重置击退抗性
+                setPlayerKnockbackResistance(player, 0.0);
+                // 传送玩家
+                player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 0, 0);
+            }
+        }
+    }
+
+    /**
      * 结束整场比赛。
      * @param winningTeam 最终获胜的队伍。
      */
@@ -535,11 +668,13 @@ public class Match {
         Component winner = Component.literal(winningTeam).withStyle(winningTeam.equals("CT") ? ChatFormatting.BLUE : ChatFormatting.GOLD);
         broadcastToAllPlayersInMatch(Component.literal("比赛结束！胜利者是 ").append(winner).append("!"));
         QisCSGO.LOGGER.info("比赛 '{}' 结束, {}方胜利.", name, winningTeam);
+        broadcastEndGameStats();//广播比赛结束时的统计数据
         removeScoreboard();
         for (UUID playerUUID : playerStats.keySet()) {
             ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
             setPlayerKnockbackResistance(player, 0.0);
         }
+        resetAndTeleportPlayers();//传送玩家到世界出生点
     }
 
     /**
@@ -549,12 +684,14 @@ public class Match {
         this.state = MatchState.FINISHED;
         broadcastToAllPlayersInMatch(Component.literal("比赛平局！"));
         QisCSGO.LOGGER.info("比赛 '{}' 结束, 平局.", name);
+        broadcastEndGameStats();//广播比赛结束时的统计数据
         removeScoreboard();
         for (UUID playerUUID : playerStats.keySet()) {
             ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
             setPlayerKnockbackResistance(player, 0.0);
         }
         this.bossBar.removeAllPlayers();
+        resetAndTeleportPlayers();//传送玩家到世界出生点
     }
 
     /**
@@ -823,6 +960,7 @@ public class Match {
                 player.removeAllEffects();
             }
         }
+        resetAndTeleportPlayers();//传送玩家到世界出生点
     }
 
     /**
