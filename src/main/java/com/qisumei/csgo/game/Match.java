@@ -14,7 +14,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.BossEvent;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
@@ -29,6 +28,7 @@ import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import net.minecraft.world.item.Items;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Match类，管理一场CSGO比赛的整个生命周期和所有核心逻辑。
@@ -785,8 +785,8 @@ public class Match {
         // 将死亡玩家设为观察者模式
         deadPlayer.setGameMode(GameType.SPECTATOR);
         
-        // 尝试锁定视角到队友或最后死亡位置
-        lockSpectatorToTeammateOrLastPos(deadPlayer);
+        /// 立即为死亡玩家寻找一个观战目标
+        findAndSetSpectatorTarget(deadPlayer);
         
         this.checkRoundEndCondition();
     }
@@ -826,54 +826,58 @@ public class Match {
         }
     }
     /**
-     * 查找同队的存活玩家
-     * @param team 队伍名称
-     * @return 存活的队友，如果没有则返回null
-     */
-    private ServerPlayer findAliveTeammate(String team) {
-        for (UUID playerUUID : this.alivePlayers) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player != null && player.gameMode.getGameModeForPlayer() == GameType.SURVIVAL) {
-                PlayerStats stats = playerStats.get(playerUUID);
-                if (stats != null && team.equals(stats.getTeam())) {
-                    return player;
-                }
-            }
-        }
-        return null;
-    }
-    /**
      * 更新所有观察者的视角目标
      */
     public void updateSpectatorCameras() {
-        // 遍历所有玩家，更新观察者的视角
         for (UUID playerUUID : playerStats.keySet()) {
             ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player != null && player.gameMode.getGameModeForPlayer() == GameType.SPECTATOR) {
-                PlayerStats stats = playerStats.get(playerUUID);
-                if (stats != null) {
-                    // 检查当前观察目标是否仍然存活
-                    Entity cameraEntity = player.getCamera();
-                    ServerPlayer currentTarget = (cameraEntity instanceof ServerPlayer) ? (ServerPlayer) cameraEntity : null;
-                    boolean targetValid = (currentTarget != null &&
-                            currentTarget.gameMode.getGameModeForPlayer() == GameType.SURVIVAL &&
-                            alivePlayers.contains(currentTarget.getUUID()));
-
-                    // 如果当前目标无效，寻找新的目标
-                    if (!targetValid) {
-                        ServerPlayer newTarget = findAliveTeammate(stats.getTeam());
-                        if (newTarget != null) {
-                            player.setCamera(newTarget);
-                        } else {
-                            // 如果找不到存活的队友，定位到最后死亡位置上方
-                            BlockPos lastDeathPos = this.lastTeammateDeathPos.get(stats.getTeam());
-                            if (lastDeathPos != null) {
-                                player.teleportTo(lastDeathPos.getX(), lastDeathPos.getY() + 10, lastDeathPos.getZ());
-                            }
-                        }
-                    }
+            
+            // 只处理处于观察者模式的玩家
+            if (player != null && player.isSpectator()) {
+                // 如果玩家正在附身自己（意味着他取消了附身），则为他寻找新目标
+                if (player.getCamera() == player) {
+                    findAndSetSpectatorTarget(player);
                 }
             }
+        }
+    }
+
+    /**
+     * 为指定的观察者寻找并设置一个新的观战目标。
+     * 逻辑：随机附身存活队友 -> C4位置 -> 队伍出生点。
+     * @param spectator 需要设置目标的观察者玩家。
+     */
+    private void findAndSetSpectatorTarget(ServerPlayer spectator) {
+        PlayerStats spectatorStats = getPlayerStats().get(spectator.getUUID());
+        if (spectatorStats == null) return;
+        
+        String team = spectatorStats.getTeam();
+
+        // 1. 尝试寻找一个随机的、存活的队友
+        List<ServerPlayer> aliveTeammates = alivePlayers.stream()
+            .map(uuid -> server.getPlayerList().getPlayer(uuid))
+            .filter(p -> p != null && team.equals(getPlayerStats().get(p.getUUID()).getTeam()))
+            .collect(Collectors.toList());
+
+        if (!aliveTeammates.isEmpty()) {
+            // 找到了存活的队友，随机选择一个进行附身
+            ServerPlayer target = aliveTeammates.get(new Random().nextInt(aliveTeammates.size()));
+            spectator.setCamera(target);
+            return; // 任务完成，退出方法
+        }
+
+        // 2. 如果没有存活的队友，检查C4是否已安放
+        if (isC4Planted() && c4Pos != null) {
+            // 传送到C4上空10格的位置
+            spectator.teleportTo(server.overworld(), c4Pos.getX() + 0.5, c4Pos.getY() + 10, c4Pos.getZ() + 0.5, spectator.getYRot(), 90);
+            return;
+        }
+
+        // 3. 如果C4也未安放，则传送到队伍的一个随机出生点
+        List<BlockPos> spawns = "CT".equals(team) ? ctSpawns : tSpawns;
+        if (!spawns.isEmpty()) {
+            BlockPos spawnPos = spawns.get(new Random().nextInt(spawns.size()));
+            spectator.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, spectator.getYRot(), spectator.getXRot());
         }
     }
     
