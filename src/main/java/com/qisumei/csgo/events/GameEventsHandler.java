@@ -88,9 +88,18 @@ public class GameEventsHandler {
 
             // --- 逻辑二：为T提供包点指引 ---
             else if ("T".equals(stats.getTeam())) {
+                // 检查玩家背包里是否有C4
+                boolean hasC4 = player.getInventory().contains(new ItemStack(QisCSGO.C4_ITEM.get()));
+
+                // [核心修正] 检测C4是否被捡起
+                // 如果玩家现在背包里有C4，但系统记录的C4携带者不是他
+                if (hasC4 && !player.getUUID().equals(match.getC4CarrierId())) {
+                    match.onC4PickedUp(player);
+                }
+
+                // --- 原有的包点指引逻辑 ---
                 // 检查玩家主手或副手是否持有C4
                 boolean holdingC4 = player.getMainHandItem().is(QisCSGO.C4_ITEM.get()) || player.getOffhandItem().is(QisCSGO.C4_ITEM.get());
-
                 // 如果手持C4，并且当前回合正在进行中
                 if (holdingC4 && match.getRoundState() == Match.RoundState.IN_PROGRESS) {
                     // 检查玩家是否在任何一个包点内
@@ -120,6 +129,15 @@ public class GameEventsHandler {
         if (event.getEntity() instanceof ServerPlayer deadPlayer) {
             Match match = MatchManager.getPlayerMatch(deadPlayer);
             if (match != null && match.getState() == Match.MatchState.IN_PROGRESS) {
+
+                // 检查死亡玩家是否为C4携带者
+                if (deadPlayer.getUUID().equals(match.getC4CarrierId())) {
+                    // 如果C4还在他身上，则触发掉落逻辑
+                    if (deadPlayer.getInventory().contains(new ItemStack(QisCSGO.C4_ITEM.get()))) {
+                        match.onC4CarrierDied(deadPlayer);
+                    }
+                }
+
                 DamageSource source = event.getSource();
                 Entity killerEntity = source.getEntity();
 

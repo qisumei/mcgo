@@ -81,6 +81,11 @@ public class Match {
     private final C4CountdownHandler c4CountdownHandler;
     private BlockPos c4Pos;
     private boolean c4Planted = false;
+    // --- C4掉落物追踪 ---
+    private UUID c4CarrierId = null; // 当前C4携带者的UUID
+    private ItemEntity lockedC4Drop = null; // 被锁定的掉落物C4实体
+    private BlockPos c4CarrierDeathPos = null; // C4携带者死亡位置
+    private int c4GlowTicks = 0;//初始化c4的发光时间
 
     // --- Boss栏计时器 ---
     private final ServerBossEvent bossBar;
@@ -251,10 +256,21 @@ public class Match {
         
         // 更新C4倒计时器
         c4CountdownHandler.tick();
+        // C4掉落物状态更新
+        if (roundState == RoundState.IN_PROGRESS && !c4Planted) {
+            updateDroppedC4State();
+        }
 
         //购买阶段区域限制逻辑
         if (roundState == RoundState.BUY_PHASE) {
             checkPlayerBuyZone();
+        }
+        // --- [新增] 处理C4掉落物发光倒计时 ---
+        if (c4GlowTicks > 0) {
+            c4GlowTicks--;
+            if (c4GlowTicks == 0 && lockedC4Drop != null && !lockedC4Drop.isRemoved()) {
+                lockedC4Drop.setGlowingTag(false);
+            }
         }
 
         // 处理主计时器
@@ -446,10 +462,12 @@ public class Match {
             .toList(); 
 
         if (!tPlayers.isEmpty()) {
-            ServerPlayer c4Carrier = tPlayers.get(new Random().nextInt(tPlayers.size()));
-            c4Carrier.getInventory().add(new ItemStack(QisCSGO.C4_ITEM.get()));
-            c4Carrier.sendSystemMessage(Component.literal("§e你携带了C4炸弹！").withStyle(ChatFormatting.BOLD));
+            ServerPlayer playerWithC4 = tPlayers.get(new Random().nextInt(tPlayers.size()));
+            playerWithC4.getInventory().add(new ItemStack(QisCSGO.C4_ITEM.get()));
+            playerWithC4.sendSystemMessage(Component.literal("§e你携带了C4炸弹！").withStyle(ChatFormatting.BOLD));
+            this.c4CarrierId = playerWithC4.getUUID();
         }
+        
     }
     
     /**
@@ -970,6 +988,95 @@ public class Match {
             }
         }
     }
+
+    /**
+     * [新增] 当C4携带者死亡时，由GameEventsHandler调用此方法。
+     * @param deadPlayer 死亡的玩家。
+     */
+    public void onC4CarrierDied(ServerPlayer deadPlayer) {
+        // 只有当死亡的玩家确实是C4携带者时才继续
+        if (deadPlayer.getUUID().equals(this.c4CarrierId)) {
+            // 记录死亡位置，用于之后锁定掉落物
+            this.c4CarrierDeathPos = deadPlayer.blockPosition();
+            // 清除旧的掉落物实体引用（如果有的话）
+            this.lockedC4Drop = null; 
+            // C4现在无人携带
+            this.c4CarrierId = null;
+        }
+    }
+
+    /**
+     * [新增] 当有玩家捡起C4时调用。
+     * @param player 捡起C4的玩家。
+     */
+    public void onC4PickedUp(ServerPlayer player) {
+        this.c4CarrierId = player.getUUID();
+        this.lockedC4Drop = null;
+        this.c4CarrierDeathPos = null; // C4被捡起，不再需要锁定位置
+        
+        // 向所有T阵营玩家广播谁拿到了C4
+        broadcastToTeam(Component.literal("C4已被 ").append(player.getDisplayName()).append(" 捡起！").withStyle(ChatFormatting.GREEN), "T");
+    }
+
+    /**
+     * [新增] 每tick更新掉落的C4的状态，包括寻找、锁定和重置。
+     */
+    private void updateDroppedC4State() {
+        // 阶段一：寻找新掉落的C4
+        // 如果我们记录了死亡位置，但还没有锁定C4实体
+        if (c4CarrierDeathPos != null && lockedC4Drop == null) {
+            // 在死亡点周围2格内寻找C4掉落物
+            AABB searchBox = new AABB(c4CarrierDeathPos).inflate(2.0);
+            List<ItemEntity> items = server.overworld().getEntitiesOfClass(ItemEntity.class, searchBox, 
+                item -> item.getItem().is(QisCSGO.C4_ITEM.get()));
+
+            if (!items.isEmpty()) {
+                // 找到了，锁定它
+                this.lockedC4Drop = items.get(0);
+                
+                // 添加1秒发光效果
+                this.lockedC4Drop.setGlowingTag(true);
+                this.c4GlowTicks = 20; 
+                
+                // 向T阵营广播C4位置
+                Component message = Component.literal("C4掉落在坐标: " + c4CarrierDeathPos.getX() + ", " + c4CarrierDeathPos.getY() + ", " + c4CarrierDeathPos.getZ()).withStyle(ChatFormatting.YELLOW);
+                broadcastToTeam(message, "T");
+            }
+        }
+
+        // 阶段二：锁定已找到的C4
+        // 如果我们已经锁定了C4实体
+        if (lockedC4Drop != null && c4CarrierDeathPos != null) {
+            // 如果C4被捡起（实体消失了）
+            if (lockedC4Drop.isRemoved()) {
+                // 重置状态（新的携带者将在 onPlayerTick 中被识别）
+                this.lockedC4Drop = null;
+                this.c4CarrierDeathPos = null;
+            } 
+            // 如果C4还在地上，但位置发生了变化
+            else if (!lockedC4Drop.blockPosition().equals(c4CarrierDeathPos)) {
+                // 将其传送回死亡点
+                lockedC4Drop.teleportTo(c4CarrierDeathPos.getX() + 0.5, c4CarrierDeathPos.getY() + 0.5, c4CarrierDeathPos.getZ() + 0.5);
+            }
+        }
+    }
+
+    /**
+     * [新增] 向指定队伍广播消息。
+     * @param message 要广播的消息。
+     * @param team 目标队伍 ("CT" 或 "T")。
+     */
+    public void broadcastToTeam(Component message, String team) {
+        for (Map.Entry<UUID, PlayerStats> entry : playerStats.entrySet()) {
+            if (team.equals(entry.getValue().getTeam())) {
+                ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+                if (player != null) {
+                    player.sendSystemMessage(message);
+                }
+            }
+        }
+    }
+
     
     /**
      * 当C4被安放时调用此方法。
@@ -991,6 +1098,11 @@ public class Match {
 
         Component message = Component.literal("§e[信息] §f炸弹已安放在 §a" + siteName + "！");
         broadcastToAllPlayersInMatch(message);
+
+        // C4已安放，清空掉落状态
+        this.c4CarrierId = null;
+        this.lockedC4Drop = null;
+        this.c4CarrierDeathPos = null;
     }
     
     /**
@@ -1023,6 +1135,11 @@ public class Match {
         c4CountdownHandler.stop();
         this.c4Planted = false;
         this.c4Pos = null;
+
+        // 重置C4掉落状态
+        this.c4CarrierId = null;
+        this.lockedC4Drop = null;
+        this.c4CarrierDeathPos = null;
     }
     
     /**
@@ -1475,6 +1592,11 @@ public class Match {
      */
     public Set<UUID> getAlivePlayers() {
         return this.alivePlayers;
+    }
+
+    //供外部调用
+    public UUID getC4CarrierId() {
+        return this.c4CarrierId;
     }
     
 }
