@@ -1,10 +1,13 @@
 package com.qisumei.csgo.events;
 
 import com.qisumei.csgo.QisCSGO;
+import com.qisumei.csgo.config.ServerConfig;
 import com.qisumei.csgo.game.EconomyManager;
 import com.qisumei.csgo.game.Match;
 import com.qisumei.csgo.game.MatchManager;
 import com.qisumei.csgo.game.PlayerStats;
+import com.qisumei.csgo.util.ItemNBTHelper;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -88,16 +91,7 @@ public class GameEventsHandler {
 
             // --- 逻辑二：为T提供包点指引 ---
             else if ("T".equals(stats.getTeam())) {
-                // 检查玩家背包里是否有C4
-                boolean hasC4 = player.getInventory().contains(new ItemStack(QisCSGO.C4_ITEM.get()));
-
-                // [核心修正] 检测C4是否被捡起
-                // 如果玩家现在背包里有C4，但系统记录的C4携带者不是他
-                if (hasC4 && !player.getUUID().equals(match.getC4CarrierId())) {
-                    match.onC4PickedUp(player);
-                }
-
-                // --- 原有的包点指引逻辑 ---
+                // --- 包点指引逻辑 ---
                 // 检查玩家主手或副手是否持有C4
                 boolean holdingC4 = player.getMainHandItem().is(QisCSGO.C4_ITEM.get()) || player.getOffhandItem().is(QisCSGO.C4_ITEM.get());
                 // 如果手持C4，并且当前回合正在进行中
@@ -126,45 +120,59 @@ public class GameEventsHandler {
      */
     @SubscribeEvent
     public static void onPlayerDeath(LivingDeathEvent event) {
-        if (event.getEntity() instanceof ServerPlayer deadPlayer) {
-            Match match = MatchManager.getPlayerMatch(deadPlayer);
-            if (match != null && match.getState() == Match.MatchState.IN_PROGRESS) {
+        if (!(event.getEntity() instanceof ServerPlayer deadPlayer)) {
+            return;
+        }
 
-                // 检查死亡玩家是否为C4携带者
-                if (deadPlayer.getUUID().equals(match.getC4CarrierId())) {
-                    // 如果C4还在他身上，则触发掉落逻辑
-                    if (deadPlayer.getInventory().contains(new ItemStack(QisCSGO.C4_ITEM.get()))) {
-                        match.onC4CarrierDied(deadPlayer);
-                    }
+        Match match = MatchManager.getPlayerMatch(deadPlayer);
+        if (match != null && match.getState() == Match.MatchState.IN_PROGRESS) {
+            
+            // --- 1. 手动处理物品掉落 ---
+            for (int i = 0; i < deadPlayer.getInventory().getContainerSize(); i++) {
+                ItemStack stack = deadPlayer.getInventory().getItem(i);
+                if (stack.isEmpty()) {
+                    continue;
                 }
 
-                DamageSource source = event.getSource();
-                Entity killerEntity = source.getEntity();
+                // 检查物品是否受保护（比如钱、护甲）
+                boolean isProtected = ServerConfig.inventoryProtectedItems.stream()
+                                            .anyMatch(id -> ItemNBTHelper.idMatches(stack, id));
 
-                if (killerEntity instanceof ServerPlayer killerPlayer && killerPlayer != deadPlayer) {
-                    ItemStack weapon = killerPlayer.getMainHandItem();
-                    Component deathMessage = killerPlayer.getDisplayName().copy().withStyle(ChatFormatting.AQUA)
-                        .append(Component.literal(" 使用 ").withStyle(ChatFormatting.GRAY))
-                        .append(weapon.getDisplayName().copy().withStyle(ChatFormatting.YELLOW))
-                        .append(Component.literal(" 击杀了 ").withStyle(ChatFormatting.GRAY))
-                        .append(deadPlayer.getDisplayName().copy().withStyle(ChatFormatting.RED));
-
-                    match.broadcastToAllPlayersInMatch(deathMessage);
-
-                    if (match.getPlayerStats().containsKey(killerPlayer.getUUID())) {
-                        int reward = EconomyManager.getRewardForKill(weapon);
-                        if (reward > 0) EconomyManager.giveMoney(killerPlayer, reward);
-                        PlayerStats killerStats = match.getPlayerStats().get(killerPlayer.getUUID());
-                        if(killerStats != null) killerStats.incrementKills();
-                    }
-                } else {
-                    Component deathMessage = deadPlayer.getDisplayName().copy().withStyle(ChatFormatting.RED)
-                        .append(Component.literal(" 阵亡了").withStyle(ChatFormatting.GRAY));
-                    match.broadcastToAllPlayersInMatch(deathMessage);
+                // 如果物品不受保护，则将其掉落
+                if (!isProtected) {
+                    deadPlayer.drop(stack.copy(), true, false);
+                    // 清空该物品栏格子
+                    deadPlayer.getInventory().setItem(i, ItemStack.EMPTY);
                 }
-                // 不再在这里调用markPlayerAsDead，因为死亡事件处理中会自动将玩家设为观察者
-                match.markPlayerAsDead(deadPlayer);
             }
+
+            // --- 2. 处理击杀播报 ---
+            DamageSource source = event.getSource();
+            Entity killerEntity = source.getEntity();
+
+            if (killerEntity instanceof ServerPlayer killerPlayer && killerPlayer != deadPlayer) {
+                ItemStack weapon = killerPlayer.getMainHandItem();
+                Component deathMessage = killerPlayer.getDisplayName().copy().withStyle(ChatFormatting.AQUA)
+                    .append(Component.literal(" 使用 ").withStyle(ChatFormatting.GRAY))
+                    .append(weapon.getDisplayName().copy().withStyle(ChatFormatting.YELLOW))
+                    .append(Component.literal(" 击杀了 ").withStyle(ChatFormatting.GRAY))
+                    .append(deadPlayer.getDisplayName().copy().withStyle(ChatFormatting.RED));
+                match.broadcastToAllPlayersInMatch(deathMessage);
+
+                if (match.getPlayerStats().containsKey(killerPlayer.getUUID())) {
+                    int reward = EconomyManager.getRewardForKill(weapon);
+                    if (reward > 0) EconomyManager.giveMoney(killerPlayer, reward);
+                    PlayerStats killerStats = match.getPlayerStats().get(killerPlayer.getUUID());
+                    if (killerStats != null) killerStats.incrementKills();
+                }
+            } else {
+                Component deathMessage = deadPlayer.getDisplayName().copy().withStyle(ChatFormatting.RED)
+                    .append(Component.literal(" 阵亡了").withStyle(ChatFormatting.GRAY));
+                match.broadcastToAllPlayersInMatch(deathMessage);
+            }
+            
+            // --- 3. 最后再调用比赛的死亡处理逻辑 ---
+            match.markPlayerAsDead(deadPlayer);
         }
     }
 }

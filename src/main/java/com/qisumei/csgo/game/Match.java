@@ -38,7 +38,7 @@ public class Match {
     public enum MatchState { PREPARING, IN_PROGRESS, FINISHED }
     public enum RoundState { BUY_PHASE, IN_PROGRESS, ROUND_END, PAUSED }
 
-    // --- 新增：拆弹相关 ---
+    // ---  ：拆弹相关 ---
     private static final int DEFUSE_TIME_TICKS = 6 * 20; // 空手拆弹需要6秒 (120 ticks)
     private static final int DEFUSE_TIME_WITH_KIT_TICKS = 3 * 20; // 使用拆弹器需要3秒 (60 ticks)
     private final Map<UUID, Integer> defusingPlayers = new HashMap<>(); // 追踪拆弹进度
@@ -64,6 +64,14 @@ public class Match {
     private AABB bombsiteA;
     private AABB bombsiteB;
 
+    // --- C4 相关 ---
+    private final C4CountdownHandler c4CountdownHandler;
+    private BlockPos c4Pos;
+    private boolean c4Planted = false;
+    
+    // --- C4掉落物广播计时器初始化 ---
+    private int c4BroadcastCooldown = 0;
+
     // --- 回合状态 ---
     private int currentRound;
     private int ctScore;
@@ -77,15 +85,6 @@ public class Match {
     // 记录每个队伍最后一名死亡玩家的位置，用于全队死亡后的观察视角
     private final Map<String, BlockPos> lastTeammateDeathPos = new HashMap<>();
 
-    // --- C4 相关 ---
-    private final C4CountdownHandler c4CountdownHandler;
-    private BlockPos c4Pos;
-    private boolean c4Planted = false;
-    // --- C4掉落物追踪 ---
-    private UUID c4CarrierId = null; // 当前C4携带者的UUID
-    private ItemEntity lockedC4Drop = null; // 被锁定的掉落物C4实体
-    private BlockPos c4CarrierDeathPos = null; // C4携带者死亡位置
-    private int c4GlowTicks = 0;//初始化c4的发光时间
 
     // --- Boss栏计时器 ---
     private final ServerBossEvent bossBar;
@@ -256,22 +255,29 @@ public class Match {
         
         // 更新C4倒计时器
         c4CountdownHandler.tick();
-        // C4掉落物状态更新
-        if (roundState == RoundState.IN_PROGRESS && !c4Planted) {
-            updateDroppedC4State();
+        // ---    C4掉落位置定时广播 ---
+        // 检查C4是否处于掉落状态 (通过检查是否有掉落物实体)
+        ItemEntity droppedC4 = findDroppedC4();
+        if (droppedC4 != null) {
+            if (c4BroadcastCooldown <= 0) {
+                // 时间到了，重置计时器为1秒（20 ticks）
+                c4BroadcastCooldown = 20;
+                // 向T阵营广播坐标
+                BlockPos c4DropPos = droppedC4.blockPosition();
+                Component message = Component.literal("C4掉落在: " + c4DropPos.getX() + ", " + c4DropPos.getY() + ", " + c4DropPos.getZ()).withStyle(ChatFormatting.YELLOW);
+                broadcastToTeam(message, "T");
+            }
+            c4BroadcastCooldown--; // 每tick减1
+        } else {
+            // 如果没有掉落的C4，确保计时器是重置的
+            c4BroadcastCooldown = 0;
         }
 
         //购买阶段区域限制逻辑
         if (roundState == RoundState.BUY_PHASE) {
             checkPlayerBuyZone();
         }
-        // --- [新增] 处理C4掉落物发光倒计时 ---
-        if (c4GlowTicks > 0) {
-            c4GlowTicks--;
-            if (c4GlowTicks == 0 && lockedC4Drop != null && !lockedC4Drop.isRemoved()) {
-                lockedC4Drop.setGlowingTag(false);
-            }
-        }
+        
 
         // 处理主计时器
         if (tickCounter > 0) {
@@ -467,14 +473,13 @@ public class Match {
             ServerPlayer playerWithC4 = tPlayers.get(new Random().nextInt(tPlayers.size()));
             playerWithC4.getInventory().add(new ItemStack(QisCSGO.C4_ITEM.get()));
             playerWithC4.sendSystemMessage(Component.literal("§e你携带了C4炸弹！").withStyle(ChatFormatting.BOLD));
-            this.c4CarrierId = playerWithC4.getUUID();
         }
         
     }
     
     /**
      * 在购买阶段生成商店村民。
-     * [核心修改] 生成的村民数量现在是每队人数的一半（向上取整，最少为1）。
+     *   生成的村民数量现在是每队人数的一半（向上取整，最少为1）。
      */
     private void spawnShops() {
         removeShops();
@@ -664,7 +669,7 @@ public class Match {
     }
 
     /**
-     * [核心修改] 根据击杀数（主要）和死亡数（次要，越少越好）获取指定队伍的顶尖玩家列表。
+     *   根据击杀数（主要）和死亡数（次要，越少越好）获取指定队伍的顶尖玩家列表。
      * @param team 要查找的队伍 ("CT" 或 "T")。
      * @param limit 返回的玩家数量上限。
      * @return 包含玩家UUID和其统计数据的有序列表。
@@ -990,81 +995,8 @@ public class Match {
             }
         }
     }
-
-    /**
-     * [新增] 当C4携带者死亡时，由GameEventsHandler调用此方法。
-     * @param deadPlayer 死亡的玩家。
-     */
-    public void onC4CarrierDied(ServerPlayer deadPlayer) {
-        // 只有当死亡的玩家确实是C4携带者时才继续
-        if (deadPlayer.getUUID().equals(this.c4CarrierId)) {
-            // 记录死亡位置，用于之后锁定掉落物
-            this.c4CarrierDeathPos = deadPlayer.blockPosition();
-            // 清除旧的掉落物实体引用（如果有的话）
-            this.lockedC4Drop = null; 
-            // C4现在无人携带
-            this.c4CarrierId = null;
-        }
-    }
-
-    /**
-     * [新增] 当有玩家捡起C4时调用。
-     * @param player 捡起C4的玩家。
-     */
-    public void onC4PickedUp(ServerPlayer player) {
-        this.c4CarrierId = player.getUUID();
-        this.lockedC4Drop = null;
-        this.c4CarrierDeathPos = null; // C4被捡起，不再需要锁定位置
-        
-        // 向所有T阵营玩家广播谁拿到了C4
-        broadcastToTeam(Component.literal("C4已被 ").append(player.getDisplayName()).append(" 捡起！").withStyle(ChatFormatting.GREEN), "T");
-    }
-
-    /**
-     * [新增] 每tick更新掉落的C4的状态，包括寻找、锁定和重置。
-     */
-    private void updateDroppedC4State() {
-        // 阶段一：寻找新掉落的C4
-        // 如果我们记录了死亡位置，但还没有锁定C4实体
-        if (c4CarrierDeathPos != null && lockedC4Drop == null) {
-            // 在死亡点周围2格内寻找C4掉落物
-            AABB searchBox = new AABB(c4CarrierDeathPos).inflate(2.0);
-            List<ItemEntity> items = server.overworld().getEntitiesOfClass(ItemEntity.class, searchBox, 
-                item -> item.getItem().is(QisCSGO.C4_ITEM.get()));
-
-            if (!items.isEmpty()) {
-                // 找到了，锁定它
-                this.lockedC4Drop = items.get(0);
-                
-                // 添加1秒发光效果
-                this.lockedC4Drop.setGlowingTag(true);
-                this.c4GlowTicks = 20; 
-                
-                // 向T阵营广播C4位置
-                Component message = Component.literal("C4掉落在坐标: " + c4CarrierDeathPos.getX() + ", " + c4CarrierDeathPos.getY() + ", " + c4CarrierDeathPos.getZ()).withStyle(ChatFormatting.YELLOW);
-                broadcastToTeam(message, "T");
-            }
-        }
-
-        // 阶段二：锁定已找到的C4
-        // 如果我们已经锁定了C4实体
-        if (lockedC4Drop != null && c4CarrierDeathPos != null) {
-            // 如果C4被捡起（实体消失了）
-            if (lockedC4Drop.isRemoved()) {
-                // 重置状态（新的携带者将在 onPlayerTick 中被识别）
-                this.lockedC4Drop = null;
-                this.c4CarrierDeathPos = null;
-            } 
-            // 如果C4还在地上，但位置发生了变化
-            else if (!lockedC4Drop.blockPosition().equals(c4CarrierDeathPos)) {
-                // 将其传送回死亡点
-                lockedC4Drop.teleportTo(c4CarrierDeathPos.getX() + 0.5, c4CarrierDeathPos.getY() + 0.5, c4CarrierDeathPos.getZ() + 0.5);
-            }
-        }
-    }
-
-    /**
-     * [新增] 向指定队伍广播消息。
+   /**
+     *   向指定队伍广播消息。
      * @param message 要广播的消息。
      * @param team 目标队伍 ("CT" 或 "T")。
      */
@@ -1100,18 +1032,13 @@ public class Match {
 
         Component message = Component.literal("§e[信息] §f炸弹已安放在 §a" + siteName + "！");
         broadcastToAllPlayersInMatch(message);
-
-        // C4已安放，清空掉落状态
-        this.c4CarrierId = null;
-        this.lockedC4Drop = null;
-        this.c4CarrierDeathPos = null;
     }
     
     /**
      * 当C4被拆除时调用。
      */
     public void onC4Defused() {
-        // 新增：移除所有正在拆弹的玩家记录
+        //  ：移除所有正在拆弹的玩家记录
         defusingPlayers.clear();
         endRound("CT", "炸弹已被拆除");
     }
@@ -1137,11 +1064,6 @@ public class Match {
         c4CountdownHandler.stop();
         this.c4Planted = false;
         this.c4Pos = null;
-
-        // 重置C4掉落状态
-        this.c4CarrierId = null;
-        this.lockedC4Drop = null;
-        this.c4CarrierDeathPos = null;
     }
     
     /**
@@ -1465,7 +1387,7 @@ public class Match {
         return this.bossBar;
     }
     /**
-     * 新增方法：为一个指定的玩家设置击退抗性属性。
+     *  ：为一个指定的玩家设置击退抗性属性。
      * @param player 目标玩家。
      * @param amount 击退抗性的值（1000.0 为 100% 抗性, 0.0 为默认值）。
      */
@@ -1476,8 +1398,37 @@ public class Match {
             server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
         }
     }
+
     /**
-     * [核心修改] 新增方法，处理玩家每一tick的拆弹逻辑。
+     *   在比赛区域内寻找掉落的C4实体。
+     * @return 如果找到，则返回ItemEntity对象；否则返回null。
+     */
+    private ItemEntity findDroppedC4() {
+        // 我们需要一个大致的搜索范围，这里我们简单地在所有出生点和包点构成的区域内搜索
+        List<BlockPos> allPositions = new ArrayList<>();
+        allPositions.addAll(ctSpawns);
+        allPositions.addAll(tSpawns);
+        if (bombsiteA != null) allPositions.add(BlockPos.containing(bombsiteA.getCenter()));
+        if (bombsiteB != null) allPositions.add(BlockPos.containing(bombsiteB.getCenter()));
+
+        if (allPositions.isEmpty()) return null;
+
+        // 创建一个包围所有关键点的搜索框，并扩大范围
+        AABB searchBox = new AABB(allPositions.get(0));
+        for (BlockPos pos : allPositions) {
+            searchBox = searchBox.minmax(new AABB(pos));
+        }
+        searchBox = searchBox.inflate(100.0); // 扩大100格
+
+        // 在这个区域内搜索C4掉落物
+        List<ItemEntity> items = server.overworld().getEntitiesOfClass(ItemEntity.class, searchBox,
+            item -> item.getItem().is(QisCSGO.C4_ITEM.get()));
+
+        return items.isEmpty() ? null : items.get(0);
+    }
+
+    /**
+     *    ，处理玩家每一tick的拆弹逻辑。
      * 由 GameEventsHandler 调用。
      * @param player 正在被检测的玩家。
      */
@@ -1593,10 +1544,6 @@ public class Match {
         return this.alivePlayers;
     }
 
-    //供外部调用
-    public UUID getC4CarrierId() {
-        return this.c4CarrierId;
-    }
-    
+       
 }
 
