@@ -42,14 +42,26 @@ public class CSCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("cs")
             // --- 管理员指令 ---
+            // --- [核心修改] 重构 /cs start 命令以优化参数顺序 ---
             .then(Commands.literal("start")
                 .requires(source -> source.hasPermission(2))
                 .then(Commands.argument("name", StringArgumentType.string())
+                    // -> /cs start <name> from <preset> [players <count>]
                     .then(Commands.literal("from")
                         .then(Commands.argument("preset_name", StringArgumentType.string())
-                            .executes(context -> createMatch(context, StringArgumentType.getString(context, "name"), 10, StringArgumentType.getString(context, "preset_name")))))
+                            // 对应: /cs start <name> from <preset>
+                            .executes(context -> createMatch(context, StringArgumentType.getString(context, "name"), 10, StringArgumentType.getString(context, "preset_name")))
+                            // 对应: /cs start <name> from <preset> players <count>
+                            .then(Commands.argument("players", IntegerArgumentType.integer(2))
+                                .executes(context -> createMatch(context, StringArgumentType.getString(context, "name"), IntegerArgumentType.getInteger(context, "players"), StringArgumentType.getString(context, "preset_name"))))
+                        )
+                    )
+                    // -> /cs start <name> [players <count>]
+                    // 对应: /cs start <name> players <count>
                     .then(Commands.argument("players", IntegerArgumentType.integer(2))
-                        .executes(context -> createMatch(context, StringArgumentType.getString(context, "name"), IntegerArgumentType.getInteger(context, "players"), null)))
+                        .executes(context -> createMatch(context, StringArgumentType.getString(context, "name"), IntegerArgumentType.getInteger(context, "players"), null))
+                    )
+                    // 对应: /cs start <name>
                     .executes(context -> createMatch(context, StringArgumentType.getString(context, "name"), 10, null))
                 )
             )

@@ -415,17 +415,47 @@ public class Match {
     
     /**
      * 在购买阶段生成商店村民。
+     * [核心修改] 生成的村民数量现在是每队人数的一半（向上取整，最少为1）。
      */
     private void spawnShops() {
         removeShops();
         int duration = ServerConfig.buyPhaseSeconds * 20;
+        Random random = new Random(); // 用于生成随机偏移量
+
+        // --- CT 商店生成逻辑 ---
         if (ctShopPos != null) {
-            String command = "summon villager " + ctShopPos.getX() + " " + ctShopPos.getY() + " " + ctShopPos.getZ() + " " + ShopManager.getCtVillagerNbt(duration);
-            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
+            int ctShops = Math.max(1, (int) Math.ceil(getCtCount()));
+            for (int i = 0; i < ctShops; i++) {
+                double offsetX = random.nextDouble() - 0.5;
+                double offsetZ = random.nextDouble() - 0.5;
+                double spawnX = ctShopPos.getX() + 0.5 + offsetX;
+                double spawnY = ctShopPos.getY();
+                double spawnZ = ctShopPos.getZ() + 0.5 + offsetZ;
+
+                String command = String.format(Locale.US, "summon villager %.2f %.2f %.2f %s", 
+                                             spawnX, spawnY, spawnZ, ShopManager.getCtVillagerNbt(duration));
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
+            }
+        } else {
+            QisCSGO.LOGGER.warn("比赛 '{}': 尝试生成商店失败，因为CT商店位置未设置。", this.name);
         }
+
+        // --- T 商店生成逻辑 ---
         if (tShopPos != null) {
-            String command = "summon villager " + tShopPos.getX() + " " + tShopPos.getY() + " " + tShopPos.getZ() + " " + ShopManager.getTVillagerNbt(duration);
-            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
+            int tShops = Math.max(1, (int) Math.ceil(getTCount()));
+            for (int i = 0; i < tShops; i++) {
+                double offsetX = random.nextDouble() - 0.5;
+                double offsetZ = random.nextDouble() - 0.5;
+                double spawnX = tShopPos.getX() + 0.5 + offsetX;
+                double spawnY = tShopPos.getY();
+                double spawnZ = tShopPos.getZ() + 0.5 + offsetZ;
+                
+                String command = String.format(Locale.US, "summon villager %.2f %.2f %.2f %s", 
+                                             spawnX, spawnY, spawnZ, ShopManager.getTVillagerNbt(duration));
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
+            }
+        } else {
+            QisCSGO.LOGGER.warn("比赛 '{}': 尝试生成商店失败，因为T商店位置未设置。", this.name);
         }
     }
 
