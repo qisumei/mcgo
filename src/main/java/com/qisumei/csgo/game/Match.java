@@ -660,6 +660,20 @@ public class Match {
     }
 
     /**
+     * 清理所有与本场比赛相关的服务器数据，如队伍和比赛实例。
+     */
+    private void cleanupMatchData() {
+        // 移除为本场比赛创建的队伍
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team remove " + ctTeamName);
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team remove " + tTeamName);
+
+        // 从比赛管理器中移除本场比赛
+        MatchManager.removeMatch(this.name);
+        
+        QisCSGO.LOGGER.info("比赛 '{}' 的数据已清理。", this.name);
+    }
+
+    /**
      * 结束整场比赛。
      * @param winningTeam 最终获胜的队伍。
      */
@@ -675,6 +689,7 @@ public class Match {
             setPlayerKnockbackResistance(player, 0.0);
         }
         resetAndTeleportPlayers();//传送玩家到世界出生点
+        cleanupMatchData();//清理比赛数据
     }
 
     /**
@@ -692,6 +707,7 @@ public class Match {
         }
         this.bossBar.removeAllPlayers();
         resetAndTeleportPlayers();//传送玩家到世界出生点
+        cleanupMatchData();//清理比赛数据
     }
 
     /**
@@ -961,6 +977,7 @@ public class Match {
             }
         }
         resetAndTeleportPlayers();//传送玩家到世界出生点
+        cleanupMatchData();
     }
 
     /**
