@@ -1,84 +1,53 @@
 package com.qisumei.csgo.game;
 
 import com.qisumei.csgo.config.ServerConfig;
-import com.qisumei.csgo.util.ItemNBTHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+import com.qisumei.csgo.util.ItemNBTHelper;
 
 /**
- * 经济管理器工具类，负责处理CSGO比赛中的金钱相关逻辑。
- * <p>
- * 这个类提供了两个核心功能：
- * 1. 向玩家发放游戏货币。
- * 2. 根据玩家击杀时使用的武器类型，计算并返回相应的金钱奖励。
- * 所有数值都从 {@link ServerConfig} 中读取，确保了配置的灵活性。
- * </p>
- *
- * @author Qisumei
+ * 经济系统管理类，用于处理游戏中玩家的金钱发放以及击杀奖励计算逻辑。
  */
-public final class EconomyManager {
+public class EconomyManager {
 
     /**
-     * 私有构造函数，防止该工具类被实例化。
-     */
-    private EconomyManager() {}
-
-    /**
-     * 向指定玩家发放一定数量的游戏货币（通过执行give命令）。
+     * 向指定玩家发放一定数量的游戏货币（以钻石形式发放）。
      *
-     * @param player 接收货币的玩家。
-     * @param amount 发放的货币数量。如果小于等于0，则不执行任何操作。
+     * @param player 要发放货币的玩家对象
+     * @param amount 发放的数量，必须大于0才生效
      */
     public static void giveMoney(ServerPlayer player, int amount) {
-        if (amount <= 0) {
-            return;
-        }
-        // 使用 /give 命令给予玩家钻石作为货币
+        if (amount <= 0) return;
+        // --- 修改: minecraft:emerald -> minecraft:diamond ---
         String command = "give " + player.getName().getString() + " minecraft:diamond " + amount;
-        // 在服务器端执行命令
         player.server.getCommands().performPrefixedCommand(player.server.createCommandSourceStack(), command);
     }
 
     /**
-     * 根据玩家击杀时使用的武器，从服务器配置中获取相应的金钱奖励。
-     * <p>
-     * 它会依次检查武器是否属于刀、手枪、冲锋枪等类别，并返回第一个匹配到的奖励金额。
-     * 如果武器不属于任何已定义的类别，或者玩家使用的是空手，则默认返回手枪的击杀奖励。
-     * </p>
+     * 根据使用的武器类型获取击杀敌人后的奖励金额。
      *
-     * @param weapon 玩家用于击杀的 {@link ItemStack}。
-     * @return 对应的金钱奖励数额。
+     * @param weapon 击杀所用的武器 ItemStack 对象
+     * @return 对应武器类型的击杀奖励金额
      */
     public static int getRewardForKill(ItemStack weapon) {
-        // 如果武器物品栈为空（例如，空手），默认返回手枪奖励
-        if (weapon.isEmpty()) {
-            return ServerConfig.killRewardPistol;
-        }
+        if (weapon.isEmpty()) return ServerConfig.killRewardPistol; // 默认手枪奖励
 
-        // **[变量同步]** 使用了之前重构的 ItemNBTHelper.isSameBaseItem 方法和 ServerConfig 中的变量。
-        if (ServerConfig.weaponsKnife.stream().anyMatch(id -> ItemNBTHelper.isSameBaseItem(weapon, id))) {
-            return ServerConfig.killRewardKnife;
-        }
-        if (ServerConfig.weaponsPistol.stream().anyMatch(id -> ItemNBTHelper.isSameBaseItem(weapon, id))) {
-            return ServerConfig.killRewardPistol;
-        }
-        if (ServerConfig.weaponsSmg.stream().anyMatch(id -> ItemNBTHelper.isSameBaseItem(weapon, id))) {
-            return ServerConfig.killRewardSmg;
-        }
-        if (ServerConfig.weaponsHeavy.stream().anyMatch(id -> ItemNBTHelper.isSameBaseItem(weapon, id))) {
-            return ServerConfig.killRewardHeavy;
-        }
-        if (ServerConfig.weaponsRifle.stream().anyMatch(id -> ItemNBTHelper.isSameBaseItem(weapon, id))) {
-            return ServerConfig.killRewardRifle;
-        }
-        if (ServerConfig.weaponsAwp.stream().anyMatch(id -> ItemNBTHelper.isSameBaseItem(weapon, id))) {
-            return ServerConfig.killRewardAwp;
-        }
-        if (ServerConfig.weaponsGrenade.stream().anyMatch(id -> ItemNBTHelper.isSameBaseItem(weapon, id))) {
-            return ServerConfig.killRewardGrenade;
-        }
+        // --- 使用新的工具方法来比较物品ID (忽略NBT) ---
+        // 判断是否为近战武器（刀）
+        if (ServerConfig.weaponsKnife.stream().anyMatch(s -> ItemNBTHelper.idMatches(weapon, s))) return ServerConfig.killRewardKnife;
+        // 判断是否为手枪
+        if (ServerConfig.weaponsPistol.stream().anyMatch(s -> ItemNBTHelper.idMatches(weapon, s))) return ServerConfig.killRewardPistol;
+        // 判断是否为冲锋枪
+        if (ServerConfig.weaponsSmg.stream().anyMatch(s -> ItemNBTHelper.idMatches(weapon, s))) return ServerConfig.killRewardSmg;
+        // 判断是否为重型武器（如机枪）
+        if (ServerConfig.weaponsHeavy.stream().anyMatch(s -> ItemNBTHelper.idMatches(weapon, s))) return ServerConfig.killRewardHeavy;
+        // 判断是否为步枪
+        if (ServerConfig.weaponsRifle.stream().anyMatch(s -> ItemNBTHelper.idMatches(weapon, s))) return ServerConfig.killRewardRifle;
+        // 判断是否为狙击枪（AWP 类型）
+        if (ServerConfig.weaponsAwp.stream().anyMatch(s -> ItemNBTHelper.idMatches(weapon, s))) return ServerConfig.killRewardAwp;
+        // 判断是否为投掷物（如手雷）
+        if (ServerConfig.weaponsGrenade.stream().anyMatch(s -> ItemNBTHelper.idMatches(weapon, s))) return ServerConfig.killRewardGrenade;
 
-        // 如果武器不属于任何特定类别，则返回默认的手枪奖励
-        return ServerConfig.killRewardPistol;
+        return ServerConfig.killRewardPistol; // 默认手枪奖励
     }
 }

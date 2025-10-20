@@ -4,6 +4,7 @@ import com.qisumei.csgo.QisCSGO;
 import com.qisumei.csgo.game.Match;
 import com.qisumei.csgo.game.MatchManager;
 import com.qisumei.csgo.game.PlayerStats;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -16,147 +17,131 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 
 /**
- * C4炸弹物品类，定义了玩家如何安放C4。
- * <p>
- * 这个类处理了玩家右键使用C4时的所有前置条件检查，以及长按完成安放的逻辑。
- * </p>
- *
- * @author Qisumei
+ * C4Item 类表示游戏中用于安放炸弹的物品。
+ * 该类继承自 Minecraft 的 Item 类，并实现了与 C4 安放相关的逻辑。
  */
 public class C4Item extends Item {
-    /**
-     * 安放C4所需的时间，单位为游戏刻 (ticks)。70 ticks = 3.5秒。
-     */
-    private static final int USE_DURATION = 70;
+    private static final int USE_DURATION = 70; // 3.5秒
 
     /**
-     * 构造函数，设置C4物品的基本属性。
+     * 构造函数，初始化 C4 物品属性。
+     * 设置最大堆叠数量为 1。
      */
     public C4Item() {
         super(new Item.Properties().stacksTo(1));
     }
 
     /**
-     * 定义物品使用时的动画。
+     * 获取使用动画类型。
      *
-     * @return 返回 {@link UseAnim#BLOCK}，使玩家在安放时呈现格挡姿势的动画。
+     * @param stack 当前物品堆栈
+     * @return 使用动画类型（BLOCK）
      */
     @Override
-    public UseAnim getUseAnimation(ItemStack stack) {
+    @javax.annotation.Nonnull
+    public UseAnim getUseAnimation(@javax.annotation.Nonnull ItemStack stack) {
         return UseAnim.BLOCK;
     }
 
-    /**
-     * 定义物品使用（长按）的总时长。
+/**
+     * 处理玩家右键使用 C4 的行为。
+     * 包括检查玩家是否处于比赛状态、是否为恐怖分子阵营、是否在炸弹安放区等条件。
      *
-     * @return 安放C4所需的时间。
+     * @param world  当前世界对象
+     * @param player 使用物品的玩家
+     * @param hand   玩家使用的交互手（主手或副手）
+     * @return 操作结果，包含使用的物品堆栈
      */
     @Override
-    public int getUseDuration(ItemStack stack, LivingEntity p_345831_) {
-        return USE_DURATION;
-    }
-
-    /**
-     * 当玩家开始右键使用C4时触发。
-     * <p>
-     * 此方法会进行一系列检查，以确定玩家是否满足安放C4的条件：
-     * <ul>
-     * <li>玩家是否在进行中的比赛中。</li>
-     * <li>回合是否处于战斗阶段 (IN_PROGRESS)。</li>
-     * <li>玩家是否属于T阵营。</li>
-     * <li>玩家是否身处炸弹安放区。</li>
-     * <li>C4是否尚未被安放。</li>
-     * </ul>
-     * 只有所有条件都满足时，才会开始安放过程（播放动画）。
-     * </p>
-     *
-     * @return 如果检查通过，返回 {@code InteractionResultHolder.consume(stack)} 开始使用物品；否则返回 {@code InteractionResultHolder.fail(stack)} 中止操作。
-     */
-    @Override
-    public InteractionResultHolder<ItemStack> use(Level world, Player player, InteractionHand hand) {
+    @javax.annotation.Nonnull
+    public InteractionResultHolder<ItemStack> use(@javax.annotation.Nonnull Level world, @javax.annotation.Nonnull Player player,@javax.annotation.Nonnull InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
 
-        // 仅在服务端执行逻辑
-        if (player instanceof ServerPlayer serverPlayer) {
-            Match match = MatchManager.getPlayerMatch(serverPlayer);
+        // 检查使用者是否为服务端玩家
+        if (player instanceof ServerPlayer sp) {
+            Match match = MatchManager.getPlayerMatch(sp);
 
-            // 检查是否满足安放条件
+            // --- 核心修正: 增加对回合状态的检查 ---
+            // 必须是比赛进行中，并且当前回合也必须是正在进行中（非购买、非结束阶段）
             if (match == null || match.getState() != Match.MatchState.IN_PROGRESS || match.getRoundState() != Match.RoundState.IN_PROGRESS) {
-                serverPlayer.sendSystemMessage(Component.literal("§c现在不是安放C4的时间！"), true);
+                // 如果回合已经结束，则发送提示信息并阻止安放。
+                sp.sendSystemMessage(Component.literal("§c现在不是安放C4的时间！"));
                 return InteractionResultHolder.fail(stack);
             }
 
-            PlayerStats stats = match.getPlayerStats().get(serverPlayer.getUUID());
+            PlayerStats stats = match.getPlayerStats().get(sp.getUUID());
             if (stats == null || !"T".equals(stats.getTeam())) {
-                serverPlayer.sendSystemMessage(Component.literal("§c只有恐怖分子(T)才能安放C4！"), true);
+                sp.sendSystemMessage(Component.literal("§c只有恐怖分子(T)才能安放C4！"));
                 return InteractionResultHolder.fail(stack);
             }
 
-            if (!match.isPlayerInBombsite(serverPlayer)) {
-                serverPlayer.sendSystemMessage(Component.literal("§c你必须在炸弹安放区才能安放C4！"), true);
+            if (!match.isPlayerInBombsite(sp)) {
+                sp.sendSystemMessage(Component.literal("§c你必须在炸弹安放区才能安放C4！"));
                 return InteractionResultHolder.fail(stack);
             }
 
-            if (match.isC4Planted()) {
-                serverPlayer.sendSystemMessage(Component.literal("§c炸弹已经被安放了！"), true);
+            if(match.isC4Planted()){
+                sp.sendSystemMessage(Component.literal("§c炸弹已经被安放了！"));
                 return InteractionResultHolder.fail(stack);
             }
-
-            // 所有检查通过，开始安放
-            player.startUsingItem(hand);
-            return InteractionResultHolder.consume(stack);
         }
 
-        // 客户端直接返回失败，因为所有逻辑都在服务端处理
-        return InteractionResultHolder.fail(stack);
+        // 如果所有检查都通过，则开始使用物品（播放安放动画）。
+        player.startUsingItem(hand);
+        return InteractionResultHolder.consume(stack);
     }
 
     /**
-     * 当玩家持续使用（长按）C4时，每tick被调用一次。
-     * <p>
-     * 当剩余使用时间 {@code remainingUseTicks} 减到1时，表示玩家已完成安放动作。
-     * 此时，代码会进行最后一次检查，确保安放的目标方块仍在包点内，然后放置C4方块。
-     * </p>
+     * 在使用过程中每 tick 调用一次的方法。
+     * 主要用于检测玩家是否完成安放动作，并执行实际的 C4 安放逻辑。
      *
-     * @param remainingUseTicks 剩余使用时间（从 {@link #USE_DURATION} 开始递减）。
+     * @param world             当前世界对象
+     * @param user              使用物品的实体（玩家）
+     * @param stack             当前物品堆栈
+     * @param remainingUseTicks 剩余使用时间（tick）
      */
     @Override
-    public void onUseTick(Level world, LivingEntity user, ItemStack stack, int remainingUseTicks) {
-        // 仅在服务端且使用完成时执行
-        if (world.isClientSide() || !(user instanceof ServerPlayer player) || remainingUseTicks > 1) {
-            return;
-        }
+    public void onUseTick(@javax.annotation.Nonnull Level world,@javax.annotation.Nonnull LivingEntity user,@javax.annotation.Nonnull ItemStack stack, int remainingUseTicks) {
+        if (!(user instanceof ServerPlayer player) || world.isClientSide()) return;
 
-        Match match = MatchManager.getPlayerMatch(player);
-        if (match == null) return;
+        if (remainingUseTicks == 1) {
+            Match match = MatchManager.getPlayerMatch(player);
+            if (match == null) return;
 
-        // 获取玩家准星指向的方块
-        BlockHitResult hitResult = getPlayerPOVHitResult(world, player, ClipContext.Fluid.NONE);
-        if (hitResult.getType() == HitResult.Type.BLOCK) {
-            // C4将被放置在玩家看着的方块的相邻位置
-            BlockPos placePos = hitResult.getBlockPos().relative(hitResult.getDirection());
+            BlockHitResult hitResult = getPlayerPOVHitResult(world, player, ClipContext.Fluid.NONE);
+            if (hitResult.getType() == HitResult.Type.BLOCK) {
+                BlockPos placePos = hitResult.getBlockPos().relative(hitResult.getDirection());
 
-            // 最终检查：确保放置点在包点内
-            if (!match.isPosInBombsite(placePos)) {
-                player.sendSystemMessage(Component.literal("§c安放位置不在包点内，取消安放！"), true);
-                player.stopUsingItem(); // 停止安放
-                return;
+                if(!match.isPosInBombsite(placePos)){
+                    player.sendSystemMessage(Component.literal("§c安放位置不在包点内，取消安放！"));
+                    return;
+                }
+
+                world.setBlock(placePos, QisCSGO.C4_BLOCK.get().defaultBlockState(), 11);
+
+                match.onC4Planted(placePos);
+
+                if (!player.getAbilities().instabuild) {
+                    stack.shrink(1);
+                }
+                player.stopUsingItem();
             }
-
-            // 放置C4方块
-            world.setBlock(placePos, QisCSGO.C4_BLOCK.get().defaultBlockState(), Block.UPDATE_ALL_IMMEDIATE);
-            match.onC4Planted(placePos);
-
-            // 如果不是创造模式，则消耗C4物品
-            if (!player.getAbilities().instabuild) {
-                stack.shrink(1);
-            }
-            player.stopUsingItem();
         }
+    }
+
+    /**
+     * 获取使用持续时间。
+     *
+     * @param stack 当前物品堆栈
+     * @param user  使用物品的实体
+     * @return 使用持续时间（单位：tick）
+     */
+    @Override
+    public int getUseDuration(@javax.annotation.Nonnull ItemStack stack,@javax.annotation.Nonnull LivingEntity user) {
+        return USE_DURATION;
     }
 }

@@ -1,32 +1,13 @@
 package com.qisumei.csgo.game;
 
 /**
- * 商店管理器工具类，负责生成用于比赛的商店村民的NBT数据。
- * <p>
- * 这个类包含了为CT和T两个阵营预设的村民交易数据。生成的村民是无敌、静止且没有AI的，
- * 纯粹作为玩家购买物品的交互界面。它还可以动态地为村民添加效果（如发光或抗性），
- * 以确保它们在特定时间内（例如购买阶段）存在且功能正常。
- * </p>
- *
- * @author Qisumei
+ * 商店管理器类，用于生成带有特定商品交易列表的村民实体 NBT 数据。
+ * 提供了获取 CT 和 T 阵营商店村民的方法，并支持动态添加药水效果。
  */
-public final class ShopManager {
+public class ShopManager {
 
-    /**
-     * CT阵营商店村民的基础NBT数据字符串。
-     * <p>
-     * 定义了村民的核心属性：
-     * <ul>
-     * <li>{@code NoAI:1b}: 禁用村民的人工智能，使其静止不动。</li>
-     * <li>{@code Silent:1b}: Villager will not make any sounds.</li>
-     * <li>{@code Invulnerable:1b}: 使村民无敌，无法被任何方式伤害。</li>
-     * <li>{@code PersistenceRequired:1b}: 防止村民在玩家远离时被游戏自动清理。</li>
-     * <li>{@code VillagerData}: 设置其职业为工具匠，这只是为了外观，不影响交易。</li>
-     * <li>{@code Offers.Recipes}: 包含所有交易项的列表。</li>
-     * </ul>
-     * </p>
-     */
-    private static final String CT_VILLAGER_NBT =
+    // CT阵营村民（Counter-Terrorist）
+    public static final String CT_VILLAGER_NBT =
 "{NoAI:1b,Silent:1b,Invulnerable:1b,PersistenceRequired:1b,"
 + "VillagerData:{profession:\"minecraft:toolsmith\",level:5,type:\"minecraft:plains\"},"
 + "Offers:{Recipes:["
@@ -41,14 +22,8 @@ public final class ShopManager {
 + "{buy:{id:\"minecraft:diamond\",count:48b},sell:{id:\"create:cardboard_package_10x12\",count:1b,components:{\"create:package_address\":\"\",\"create:package_contents\":[{item:{components:{\"geckolib:stack_animatable_id\":42L,\"pointblank:custom_tag\":{aim:0b,ammo:5,ammox:{},as:[{id:\"pointblank:hawk_scope\",rmv:1b}],fmid:[I;573397678,1834630192,-1285657842,-1809198908],lid:-7902711423806119341L,mid:-3352332155803909643L,sa:{scope:\"//hawk_scope\"},seed:-1941778996112074291L},\"pointblank:ts\":1759541616343L},count:1,id:\"pointblank:l96a1\"},slot:0},{item:{count:30,id:\"pointblank:ammo338lapua\"},slot:1}]}}},"
 + "{buy:{id:\"minecraft:diamond\",count:4b},sell:{id:\"pointblank:grenade\",count:1b}}]}}";
 
-
-    /**
-     * T阵营商店村民的基础NBT数据字符串。
-     * <p>
-     * 结构与CT村民相同，但包含为T阵营定制的交易列表。
-     * </p>
-     */
-    private static final String T_VILLAGER_NBT =
+    // T阵营村民（Terrorist
+public static final String T_VILLAGER_NBT =
 "{NoAI:1b,Silent:1b,Invulnerable:1b,PersistenceRequired:1b,"
 + "VillagerData:{profession:\"minecraft:toolsmith\",level:5,type:\"minecraft:plains\"},"
 + "Offers:{Recipes:["
@@ -62,46 +37,38 @@ public final class ShopManager {
 + "{buy:{id:\"minecraft:diamond\",count:52b},sell:{id:\"create:cardboard_package_10x12\",count:1b,components:{\"create:package_address\":\"\",\"create:package_contents\":[{item:{components:{\"geckolib:stack_animatable_id\":53L,\"pointblank:custom_tag\":{aim:0b,ammo:100,ammox:{},fmid:[I;-1035269231,-1050988176,-1692405250,-822147727],lid:-7568618470194677918L,mid:-3365118316045254505L,sa:{scope:\"/\"},seed:3588360488820813235L},\"pointblank:ts\":1759544394579L},count:1,id:\"pointblank:m249\"},slot:0},{item:{count:64,id:\"pointblank:ammo556\"},slot:1}]}}},"
 + "{buy:{id:\"minecraft:diamond\",count:48b},sell:{id:\"create:cardboard_package_10x12\",count:1b,components:{\"create:package_address\":\"\",\"create:package_contents\":[{item:{components:{\"geckolib:stack_animatable_id\":42L,\"pointblank:custom_tag\":{aim:0b,ammo:5,ammox:{},as:[{id:\"pointblank:hawk_scope\",rmv:1b}],fmid:[I;573397678,1834630192,-1285657842,-1809198908],lid:-7902711423806119341L,mid:-3352332155803909643L,sa:{scope:\"//hawk_scope\"},seed:-1941778996112074291L},\"pointblank:ts\":1759541616343L},count:1,id:\"pointblank:l96a1\"},slot:0},{item:{count:30,id:\"pointblank:ammo338lapua\"},slot:1}]}}},"
 + "{buy:{id:\"minecraft:diamond\",count:3b},sell:{id:\"pointblank:grenade\",count:1b}}]}}";
-
     /**
-     * 私有构造函数，防止该工具类被实例化。
-     */
-    private ShopManager() {}
-
-    /**
-     * 向基础NBT字符串中动态注入药水效果。
+     * 向基础NBT字符串中注入指定持续时间的抗性提升效果。
      *
-     * @param baseNbt  原始的村民NBT数据字符串。
-     * @param duration 药水效果的持续时间（单位：tick）。
-     * @return 添加了抗性提升效果后的完整NBT字符串。
+     * @param baseNbt 原始的村民NBT数据字符串
+     * @param duration 药水效果的持续时间（单位：tick）
+     * @return 添加了抗性提升效果后的完整NBT字符串
      */
     private static String addEffectsToNbt(String baseNbt, int duration) {
-        // ActiveEffects: 这是一个NBT列表，包含了实体身上的所有激活的药水效果。
-        // Id:11 -> 抗性提升效果 (Resistance)。
-        // Amplifier:4b -> 效果等级为V (等级从0开始计数，4代表5级)。5级抗性提供100%伤害减免。
-        // Duration -> 效果的持续时间，单位为游戏刻 (tick)。
+        // 抗性提升 (id:11), 4级=V, 免疫伤害
         String effectsNbt = "ActiveEffects:[{Id:11,Amplifier:4b,Duration:" + duration + "}]";
-        // 通过字符串拼接，将效果NBT插入到主NBT结构的开头
+        // 将效果插入到NBT的第一个 '{' 之后
         return "{" + effectsNbt + "," + baseNbt.substring(1);
     }
 
     /**
-     * 获取带有指定持续时间抗性效果的CT阵营商店村民的完整NBT数据。
+     * 获取带有指定持续时间抗性效果的CT阵营商店村民NBT数据。
      *
-     * @param duration 效果持续时间（单位：tick），通常为购买阶段的长度。
-     * @return 可用于 {@code /summon} 命令的完整NBT字符串。
+     * @param duration 效果持续时间（单位：tick）
+     * @return 完整的CT阵营村民NBT字符串
      */
     public static String getCtVillagerNbt(int duration) {
         return addEffectsToNbt(CT_VILLAGER_NBT, duration);
     }
 
     /**
-     * 获取带有指定持续时间抗性效果的T阵营商店村民的完整NBT数据。
+     * 获取带有指定持续时间抗性效果的T阵营商店村民NBT数据。
      *
-     * @param duration 效果持续时间（单位：tick），通常为购买阶段的长度。
-     * @return 可用于 {@code /summon} 命令的完整NBT字符串。
+     * @param duration 效果持续时间（单位：tick）
+     * @return 完整的T阵营村民NBT字符串
      */
     public static String getTVillagerNbt(int duration) {
         return addEffectsToNbt(T_VILLAGER_NBT, duration);
     }
+
 }

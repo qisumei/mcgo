@@ -7,81 +7,60 @@ import com.qisumei.csgo.game.preset.MatchPreset;
 import com.qisumei.csgo.util.ItemNBTHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.BossEvent;
-import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.scores.*;
+import net.minecraft.world.scores.DisplaySlot;
+import net.minecraft.world.scores.Objective;
+import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * CSGO比赛核心类，管理一场比赛的完整生命周期、状态机和所有游戏逻辑。
- * <p>
- * 这个类是整个模组最核心的部分，它负责处理回合的开始与结束、玩家状态管理、
- * C4逻辑、经济系统、计分板、Boss栏等所有与单场比赛相关的事务。
- * </p>
- *
- * @author Qisumei
+ * Match类，管理一场CSGO比赛的整个生命周期和所有核心逻辑。
  */
 public class Match {
 
-    // --- 枚举定义 ---
-
-    /**
-     * 比赛的整体状态。
-     */
     public enum MatchState { PREPARING, IN_PROGRESS, FINISHED }
-
-    /**
-     * 单个回合内的具体阶段。
-     */
     public enum RoundState { BUY_PHASE, IN_PROGRESS, ROUND_END, PAUSED }
 
-    // --- 常量定义 ---
-
+    // ---  ：拆弹相关 ---
     private static final int DEFUSE_TIME_TICKS = 6 * 20; // 空手拆弹需要6秒 (120 ticks)
     private static final int DEFUSE_TIME_WITH_KIT_TICKS = 3 * 20; // 使用拆弹器需要3秒 (60 ticks)
-    private static final int C4_TIMER_TICKS = 40 * 20; // C4爆炸倒计时40秒
-    private static final int C4_BROADCAST_COOLDOWN_TICKS = 20; // C4掉落位置广播间隔 (1秒)
-    private static final double BUY_ZONE_MAX_DISTANCE = 10.0; // 购买区域最大允许距离
-    private static final double C4_EXPLOSION_RADIUS = 16.0; // C4爆炸伤害半径
-    private static final float C4_EXPLOSION_MAX_DAMAGE = 100.0f; // C4爆炸最大伤害
-    private static final int SCOREBOARD_REBUILD_INTERVAL_TICKS = 200; // 计分板重建间隔 (10秒)
+    private final Map<UUID, Integer> defusingPlayers = new HashMap<>(); // 追踪拆弹进度
 
     // --- 比赛基础信息 ---
     private final String name;
+    private MatchState state;
     private final int maxPlayers;
     private final MinecraftServer server;
-    private MatchState state;
+    private final Map<UUID, PlayerStats> playerStats;
     private int totalRounds;
     private int roundTimeSeconds;
 
-    // --- 队伍与玩家数据 ---
+    // --- 队伍信息 ---
     private final String ctTeamName;
     private final String tTeamName;
-    private final Map<UUID, PlayerStats> playerStats;
-    private final Set<UUID> alivePlayers;
-    private final Map<String, BlockPos> lastTeammateDeathPos; // 记录每队最后死亡玩家的位置，用于观察
 
-    // --- 地图配置信息 ---
+    // --- 地图信息 ---
     private final List<BlockPos> ctSpawns;
     private final List<BlockPos> tSpawns;
     private BlockPos ctShopPos;
@@ -89,329 +68,330 @@ public class Match {
     private AABB bombsiteA;
     private AABB bombsiteB;
 
-    // --- 回合状态机 ---
-    private RoundState roundState;
+    // --- C4 相关 ---
+    private final C4CountdownHandler c4CountdownHandler;
+    private BlockPos c4Pos;
+    private boolean c4Planted = false;
+    
+    // --- C4掉落物广播计时器初始化 ---
+    private int c4BroadcastCooldown = 0;
+
+    // --- 回合状态 ---
     private int currentRound;
     private int ctScore;
     private int tScore;
-    private int tickCounter; // 主计时器，用于回合时间、购买时间等
+    private RoundState roundState;
+    private int tickCounter;
+    private final Set<UUID> alivePlayers;
     private String lastRoundWinner;
     private final Set<UUID> roundSurvivors;
+    private int scoreboardRebuildCounter = 0;
+    // 记录每个队伍最后一名死亡玩家的位置，用于全队死亡后的观察视角
+    private final Map<String, BlockPos> lastTeammateDeathPos = new HashMap<>();
 
-    // --- C4 相关状态 ---
-    private final C4CountdownHandler c4CountdownHandler;
-    private boolean c4Planted;
-    private BlockPos c4Pos;
-    private int c4BroadcastCooldown;
-    private final Map<UUID, Integer> defusingPlayers; // 追踪玩家的拆弹进度
 
-    // --- UI与显示元素 ---
+    // --- Boss栏计时器 ---
     private final ServerBossEvent bossBar;
+
+    // --- 计分板 ---
     private Scoreboard scoreboard;
     private Objective objective;
-    private int scoreboardRebuildCounter;
 
     /**
      * Match类的构造函数，用于初始化一场新的比赛。
-     *
-     * @param name       比赛的唯一名称。
+     * @param name 比赛的唯一名称。
      * @param maxPlayers 比赛的最大玩家数。
-     * @param server     Minecraft服务器实例。
+     * @param server Minecraft服务器实例。
      */
     public Match(String name, int maxPlayers, MinecraftServer server) {
-        // 初始化比赛基础信息
         this.name = name;
+        this.state = MatchState.PREPARING;
         this.maxPlayers = maxPlayers;
         this.server = server;
-        this.state = MatchState.PREPARING;
-        this.totalRounds = 12;
-        this.roundTimeSeconds = 120; // 默认2分钟
-
-        // 初始化队伍与玩家数据
-        this.ctTeamName = name + "_CT";
-        this.tTeamName = name + "_T";
         this.playerStats = new HashMap<>();
-        this.alivePlayers = new HashSet<>();
-        this.lastTeammateDeathPos = new HashMap<>();
-
-        // 初始化地图配置
         this.ctSpawns = new ArrayList<>();
         this.tSpawns = new ArrayList<>();
-
-        // 初始化回合状态
-        this.roundState = RoundState.PAUSED;
+        this.totalRounds = 12;
+        this.roundTimeSeconds = 120; // 默认2分钟
+        this.ctTeamName = name + "_CT";
+        this.tTeamName = name + "_T";
         this.currentRound = 0;
         this.ctScore = 0;
         this.tScore = 0;
+        this.roundState = RoundState.PAUSED;
         this.tickCounter = 0;
+        this.alivePlayers = new HashSet<>();
         this.lastRoundWinner = "";
         this.roundSurvivors = new HashSet<>();
-
-        // 初始化C4相关
         this.c4CountdownHandler = new C4CountdownHandler(this);
-        this.c4Planted = false;
-        this.c4Pos = null;
-        this.c4BroadcastCooldown = 0;
-        this.defusingPlayers = new HashMap<>();
 
-        // 初始化UI元素
+        // 初始化Boss栏
         this.bossBar = new ServerBossEvent(
-                Component.literal("等待比赛开始..."),
-                BossEvent.BossBarColor.WHITE,
-                BossEvent.BossBarOverlay.PROGRESS
+            Component.literal("等待比赛开始..."),
+            BossEvent.BossBarColor.WHITE,
+            BossEvent.BossBarOverlay.PROGRESS
         );
-        this.scoreboardRebuildCounter = 0;
     }
 
-    // =================================================================================
-    // SECTION: 比赛主逻辑流程 (Main Match Flow)
-    // =================================================================================
+    /**
+     * 将当前比赛的设置转换为一个MatchPreset对象，用于保存。
+     * @return 包含当前比赛设置的MatchPreset实例。
+     */
+    public MatchPreset toPreset() {
+        return new MatchPreset(
+            this.ctSpawns,
+            this.tSpawns,
+            this.ctShopPos,
+            this.tShopPos,
+            this.bombsiteA,
+            this.bombsiteB,
+            this.totalRounds,
+            this.roundTimeSeconds
+        );
+    }
+
+    /**
+     * 从一个MatchPreset对象加载比赛设置。
+     * @param preset 包含比赛设置的预设对象。
+     */
+    public void applyPreset(MatchPreset preset) {
+        this.ctSpawns.clear();
+        this.ctSpawns.addAll(preset.ctSpawns);
+        this.tSpawns.clear();
+        this.tSpawns.addAll(preset.tSpawns);
+        this.ctShopPos = preset.ctShopPos;
+        this.tShopPos = preset.tShopPos;
+        this.bombsiteA = preset.bombsiteA;
+        this.bombsiteB = preset.bombsiteB;
+        this.totalRounds = preset.totalRounds;
+        this.roundTimeSeconds = preset.roundTimeSeconds;
+    }
 
     /**
      * 正式开始比赛。
-     * 此方法将比赛状态从未开始转为进行中，并启动第一个回合。
      */
     public void start() {
         this.state = MatchState.IN_PROGRESS;
 
-        // 为所有参赛玩家设置高击退抗性
         for (UUID playerUUID : playerStats.keySet()) {
             ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
             setPlayerKnockbackResistance(player, 1000.0);
         }
-
-        // 初始化计分板
         setupScoreboard();
         broadcastToAllPlayersInMatch(Component.literal("比赛开始！"));
-        // 开始新回合
         startNewRound();
     }
 
     /**
-     * 比赛的核心更新方法，每tick被MatchManager调用。
-     * 这是驱动所有回合内逻辑状态变化的地方。
-     */
-    public void tick() {
-        if (state != MatchState.IN_PROGRESS) return;
-
-        // 1. 更新C4倒计时器（如果已安放）
-        c4CountdownHandler.tick();
-
-        // 2. 检查并广播掉落的C4位置
-        tickC4DropLocation();
-
-        // 3. 在购买阶段，检查玩家是否离开购买区域
-        if (roundState == RoundState.BUY_PHASE) {
-            checkPlayerBuyZone();
-        }
-
-        // 4. 处理主计时器
-        if (tickCounter > 0) {
-            tickCounter--;
-            if (tickCounter == 0) {
-                // 根据当前回合状态，在计时器归零时触发相应事件
-                switch (roundState) {
-                    case BUY_PHASE -> beginRoundInProgress(); // 购买阶段结束，开始战斗
-                    case IN_PROGRESS -> endRound("CT", "时间耗尽"); // 回合时间到，CT胜利
-                    case ROUND_END -> {
-                        if (this.state == MatchState.IN_PROGRESS) {
-                            startNewRound(); // 回合结束展示时间到，开始新回合
-                        }
-                    }
-                    // [修复] 统一使用箭头表达式
-                    case PAUSED -> {
-                        // 在PAUSED状态下，不执行任何操作
-                    }
-                    default -> {
-                        // 在其他未定义状态下，不执行任何操作
-                    }
-                }
-            }
-        }
-
-        // 5. 定期更新UI
-        if (server.getTickCount() % 20 == 0) {
-            updateScoreboard(); // 每秒更新计分板
-        }
-        if (server.getTickCount() % 5 == 0) {
-            updateSpectatorCameras(); // 每1/4秒更新观察者视角
-        }
-        updateBossBar(); // 每tick更新Boss栏进度条
-    }
-
-    /**
      * 开始一个新回合的完整流程。
-     * 这是比赛中最重要的逻辑序列之一。
      */
     private void startNewRound() {
-        // 步骤 1: 清理战场，移除上回合的掉落物
+        // 1. 清理战场上的掉落物
         clearDroppedItems();
-
-        // 步骤 2: 推进回合数，重置C4状态
+        
+        // 2. 推进回合数并重置C4状态
         this.currentRound++;
         resetC4State();
 
-        // 步骤 3: 检查是否到达半场，如果需要则交换队伍
+        // 3. 检查是否需要换边
         if (this.currentRound == (this.totalRounds / 2) + 1) {
             swapTeams();
         }
+        //给玩家广播当前比分
+        String titleJson = String.format(
+            "[{\"text\":\"CT \",\"color\":\"blue\"},{\"text\":\"%d - %d\",\"color\":\"white\"},{\"text\":\" T\",\"color\":\"gold\"}]",
+            ctScore, tScore
+        );
+        // 遍历比赛中的所有玩家
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            // 确保玩家在线
+            if (player != null) {
+                // 为该玩家单独执行title命令
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "title " + player.getName().getString() + " title " + titleJson);
+            }
+        }
 
-        // 步骤 4: 广播当前比分
-        broadcastScoreUpdate();
+        //全局聊天广播比分
+        String chatJson = String.format(
+            "[{\"text\":\"%s：\",\"color\":\"yellow\"},{\"text\":\"CT \",\"color\":\"blue\"},{\"text\":\"%d:%d\",\"color\":\"white\",\"bold\":true},{\"text\":\" T\",\"color\":\"gold\"}]",
+            this.name, ctScore, tScore
+        );
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "tellraw @a " + chatJson);
 
-        // 步骤 5: 设置回合状态为购买阶段，并重置计时器
+
+        // 4. 设置回合状态为购买阶段
         this.roundState = RoundState.BUY_PHASE;
         this.tickCounter = ServerConfig.buyPhaseSeconds * 20;
 
-        // 步骤 6: 传送玩家，清空背包，并发放本回合应有的装备
+        // 5. [顺序调整] 先传送玩家、清空背包、并发放该回合应有的装备（包括手枪局武器）
         teleportAndPreparePlayers();
-
-        // 步骤 7: 在装备发放完毕后，处理经济，发放金钱
+        
+        // 6. [顺序调整] 在装备发放完毕后，再处理经济，发放金钱
         distributeRoundIncome();
-
-        // 步骤 8: 生成商店村民
+        
+        // 在发放金钱后，生成商店村民
         spawnShops();
 
-        // 步骤 9: 广播回合开始消息
+        // 7. 为所有玩家添加购买阶段的无敌和减速效果
+        int resistanceDuration = ServerConfig.buyPhaseSeconds * 20;
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player != null) {
+                player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, resistanceDuration, 4, false, false, true));
+            }
+        }
+
+        // 8. 广播回合开始的消息
         broadcastToAllPlayersInMatch(Component.literal("第 " + this.currentRound + " 回合开始！购买阶段！"));
         QisCSGO.LOGGER.info("比赛 '{}': 第 {} 回合开始，进入购买阶段。", name, currentRound);
-
-        // 步骤 10: 最后为T阵营随机一名玩家发放C4
+        
+        // 9. 最后再给T发放C4
         giveC4ToRandomT();
     }
 
     /**
-     * 结束购买阶段，进入回合的战斗阶段。
+     * 比赛的核心更新方法，每tick被MatchManager调用。
      */
-    private void beginRoundInProgress() {
-        this.roundState = RoundState.IN_PROGRESS;
-        this.tickCounter = this.roundTimeSeconds * 20;
+    public void tick() {
+        // 如果比赛不在进行中，则不执行任何操作
+        if (state != MatchState.IN_PROGRESS) return;
+        
+        // 更新C4倒计时器
+        c4CountdownHandler.tick();
+        // ---    C4掉落位置定时广播 ---
+        // 检查C4是否处于掉落状态 (通过检查是否有掉落物实体)
+        ItemEntity droppedC4 = findDroppedC4();
+        if (droppedC4 != null) {
+            if (c4BroadcastCooldown <= 0) {
+                // 时间到了，重置计时器为1秒（20 ticks）
+                c4BroadcastCooldown = 20;
+                // 向T阵营广播坐标
+                BlockPos c4DropPos = droppedC4.blockPosition();
+                Component message = Component.literal("C4掉落在: " + c4DropPos.getX() + ", " + c4DropPos.getY() + ", " + c4DropPos.getZ()).withStyle(ChatFormatting.YELLOW);
+                broadcastToTeam(message, "T");
+            }
+            c4BroadcastCooldown--; // 每tick减1
 
-        // 再次传送玩家回出生点，防止有玩家在购买阶段偷跑
-        teleportPlayersToSpawns();
 
-        // 记录所有玩家在战斗阶段开始时的装备，用于胜利后保留
-        recordAllPlayerGear();
+            for (UUID playerUUID : alivePlayers) { // 只遍历存活的玩家
+                ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+                if (player == null) continue;
 
-        // 移除商店村民
-        removeShops();
-
-        broadcastToAllPlayersInMatch(Component.literal("战斗开始！"));
-        QisCSGO.LOGGER.info("比赛 '{}': 进入战斗阶段。", name);
-    }
-
-    /**
-     * 结束当前回合的逻辑。
-     *
-     * @param winningTeam 获胜的队伍 ("CT" 或 "T")。
-     * @param reason      获胜的原因（例如 "全歼敌人"、"炸弹爆炸"）。
-     */
-    private void endRound(String winningTeam, String reason) {
-        if (this.roundState == RoundState.ROUND_END) return; // 防止重复调用
-
-        this.roundState = RoundState.ROUND_END;
-        this.lastRoundWinner = winningTeam;
-
-        // 记录本回合的幸存者
-        this.roundSurvivors.clear();
-        this.roundSurvivors.addAll(this.alivePlayers);
-
-        // 更新比分和连败记录
-        if (winningTeam.equals("CT")) {
-            ctScore++;
-            broadcastToAllPlayersInMatch(Component.literal("CT方 胜利！ (" + reason + ")"));
-            playerStats.values().stream().filter(s -> "CT".equals(s.getTeam())).forEach(PlayerStats::resetConsecutiveLosses);
-            playerStats.values().stream().filter(s -> "T".equals(s.getTeam())).forEach(PlayerStats::incrementConsecutiveLosses);
-        } else {
-            tScore++;
-            broadcastToAllPlayersInMatch(Component.literal("T方 胜利！ (" + reason + ")"));
-            playerStats.values().stream().filter(s -> "T".equals(s.getTeam())).forEach(PlayerStats::resetConsecutiveLosses);
-            playerStats.values().stream().filter(s -> "CT".equals(s.getTeam())).forEach(PlayerStats::incrementConsecutiveLosses);
-        }
-
-        QisCSGO.LOGGER.info("比赛 '{}': 第 {} 回合结束, {}方胜利. 比分 CT {}:{} T", name, currentRound, winningTeam, ctScore, tScore);
-
-        // 检查比赛是否结束
-        int roundsToWin = (this.totalRounds / 2) + 1;
-        if (ctScore >= roundsToWin || tScore >= roundsToWin) {
-            finishMatch(ctScore > tScore ? "CT" : "T");
-        } else if (currentRound >= totalRounds) {
-            if (ctScore == tScore) {
-                handleTie();
-            } else {
-                finishMatch(ctScore > tScore ? "CT" : "T");
+                PlayerStats stats = playerStats.get(playerUUID);
+                // 确保是T阵营的玩家
+                if (stats != null && "T".equals(stats.getTeam())) {
+                    // 计算玩家与C4掉落物的直线距离
+                    double distance = player.distanceTo(droppedC4);
+                    // 将距离格式化为一位小数的字符串
+                    String distanceString = String.format("%.1f", distance); 
+                    
+                    // 创建要显示的消息
+                    Component distanceMessage = Component.literal("距离C4: " + distanceString + "米").withStyle(ChatFormatting.YELLOW);
+                    
+                    // 通过 Action Bar 发送给玩家 (true代表发送到Action Bar)
+                    player.sendSystemMessage(distanceMessage, true);
+                }
             }
         } else {
-            // 如果比赛未结束，则设置回合结束的等待时间
-            this.tickCounter = ServerConfig.roundEndSeconds * 20;
+            // 如果没有掉落的C4，确保计时器是重置的
+            c4BroadcastCooldown = 0;
+        }
+
+        //购买阶段区域限制逻辑
+        if (roundState == RoundState.BUY_PHASE) {
+            checkPlayerBuyZone();
+        }
+        
+
+        // 处理主计时器
+        if (tickCounter > 0) {
+            tickCounter--;
+            // 当计时器归零时，根据当前回合状态触发相应事件
+            if (tickCounter == 0) {
+                if (roundState == RoundState.BUY_PHASE) {
+                    beginRoundInProgress(); // 购买阶段结束，开始战斗
+                } else if (roundState == RoundState.IN_PROGRESS) {
+                    endRound("CT", "时间耗尽"); // 回合时间到，CT胜利
+                } else if (roundState == RoundState.ROUND_END) {
+                    if (this.state == MatchState.IN_PROGRESS) {
+                        startNewRound(); // 回合结束展示时间到，开始新回合
+                    }
+                }
+            }
+        }
+        // 在每秒的 tick 中，更新计分板
+        if (server.getTickCount() % 20 == 0) {
+            updateScoreboard(); // 每秒更新计分板
+        }
+        if (server.getTickCount() % 5 == 0) {
+            updateSpectatorCameras();
+        }
+        
+        // 每一tick都更新Boss栏，以保证进度条平滑
+        updateBossBar();
+    }
+
+    /**
+     * 在购买阶段检查玩家是否超出购买区域，如果超出则传送回出生点。
+     */
+    private void checkPlayerBuyZone() {
+        final double maxDistance = 10.0; // 最大允许距离
+        Random random = new Random();
+
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player == null) continue;
+
+            PlayerStats stats = playerStats.get(playerUUID);
+            if (stats == null) continue;
+
+            String team = stats.getTeam();
+            BlockPos shopPos = "CT".equals(team) ? ctShopPos : tShopPos;
+            List<BlockPos> spawns = "CT".equals(team) ? ctSpawns : tSpawns;
+
+            // 如果商店或出生点未设置，则跳过此玩家的检查
+            if (shopPos == null || spawns.isEmpty()) continue;
+
+            // 计算玩家与商店的水平距离
+            double distance = Math.sqrt(player.distanceToSqr(shopPos.getX() + 0.5, player.getY(), shopPos.getZ() + 0.5));
+
+            if (distance > maxDistance) {
+                // 如果超出距离，则传送回一个随机的出生点
+                BlockPos spawnPos = spawns.get(random.nextInt(spawns.size()));
+                player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, player.getYRot(), player.getXRot());
+                // 给予玩家提示
+                player.sendSystemMessage(Component.literal("购买阶段请不要离开购买区域！").withStyle(ChatFormatting.RED), true);
+            }
         }
     }
 
     /**
-     * 结束整场比赛。
-     *
-     * @param winningTeam 最终获胜的队伍。
+     * 在半场时交换双方队伍。
      */
-    private void finishMatch(String winningTeam) {
-        this.state = MatchState.FINISHED;
-        Component winnerText = Component.literal(winningTeam).withStyle(winningTeam.equals("CT") ? ChatFormatting.BLUE : ChatFormatting.GOLD);
-        broadcastToAllPlayersInMatch(Component.literal("比赛结束！胜利者是 ").append(winnerText).append("!"));
-        QisCSGO.LOGGER.info("比赛 '{}' 结束, {}方胜利.", name, winningTeam);
+    private void swapTeams() {
+        broadcastToAllPlayersInMatch(Component.literal("半场换边！队伍已交换。").withStyle(ChatFormatting.YELLOW));
+        int tempScore = this.ctScore;
+        this.ctScore = this.tScore;
+        this.tScore = tempScore;
+        for (Map.Entry<UUID, PlayerStats> entry : playerStats.entrySet()) {
+            PlayerStats stats = entry.getValue();
+            String oldTeam = stats.getTeam();
+            String newTeam = "CT".equals(oldTeam) ? "T" : "CT";
+            stats.setTeam(newTeam);
+            
 
-        // 清理和收尾工作
-        broadcastEndGameStats();
-        resetAndTeleportPlayers();
-        cleanupMatchData();
+            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+            if (player != null) {
+                String newTeamName = "CT".equals(newTeam) ? getCtTeamName() : getTTeamName();
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team leave " + player.getName().getString());
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team join " + newTeamName + " " + player.getName().getString());
+                performSelectiveClear(player);
+                player.sendSystemMessage(Component.literal("你现在是 " + ("CT".equals(newTeam) ? "反恐精英 (CT)" : "恐怖分子 (T)") + " 队的一员！").withStyle(ChatFormatting.AQUA));
+            }
+        }
     }
-
-    /**
-     * 由管理员强制结束比赛。
-     */
-    public void forceEnd() {
-        this.state = MatchState.FINISHED;
-        broadcastToAllPlayersInMatch(Component.literal("比赛已被管理员强制结束。"));
-
-        // 清理和收尾工作
-        resetAndTeleportPlayers();
-        cleanupMatchData();
-    }
-
-    /**
-     * 处理平局情况。
-     */
-    private void handleTie() {
-        this.state = MatchState.FINISHED;
-        broadcastToAllPlayersInMatch(Component.literal("比赛平局！"));
-        QisCSGO.LOGGER.info("比赛 '{}' 结束, 平局.", name);
-
-        // 清理和收尾工作
-        broadcastEndGameStats();
-        resetAndTeleportPlayers();
-        cleanupMatchData();
-    }
-
-    /**
-     * 清理所有与本场比赛相关的服务器数据。
-     */
-    private void cleanupMatchData() {
-        removeShops();
-        removeScoreboard();
-        this.bossBar.removeAllPlayers();
-
-        // 移除为本场比赛创建的队伍
-        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team remove " + ctTeamName);
-        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team remove " + tTeamName);
-
-        // 从比赛管理器中移除本场比赛
-        MatchManager.removeMatch(this.name);
-
-        QisCSGO.LOGGER.info("比赛 '{}' 的数据已清理。", this.name);
-    }
-
-    // =================================================================================
-    // SECTION: 玩家状态与行为处理 (Player State & Actions)
-    // =================================================================================
-
+    
     /**
      * 在回合开始时，传送所有玩家到各自的出生点并准备他们的状态。
      */
@@ -429,296 +409,621 @@ public class Match {
             PlayerStats stats = getPlayerStats().get(playerUUID);
             if (stats == null) continue;
 
-            // 根据上回合结果决定是否保留装备
-            boolean wasWinner = stats.getTeam().equals(this.lastRoundWinner);
+            String team = stats.getTeam();
+            boolean wasWinner = team.equals(this.lastRoundWinner);
             boolean wasSurvivor = this.roundSurvivors.contains(playerUUID);
 
             performSelectiveClear(player);
 
             if (isPistolRound) {
-                // 手枪局给予初始装备
-                giveInitialGear(player, stats.getTeam());
+                giveInitialGear(player, team);
             } else {
-                // 如果是胜利方的幸存者，则恢复上回合的装备
                 if (wasSurvivor && wasWinner) {
-                    stats.getRoundGear().forEach(gear -> player.getInventory().add(gear.copy()));
+                    for (ItemStack gearStack : stats.getRoundGear()) {
+                        player.getInventory().add(gearStack.copy());
+                    }
                 }
             }
+            
             stats.clearRoundGear();
 
-            // 重置玩家状态
             player.setGameMode(GameType.SURVIVAL);
             player.setHealth(player.getMaxHealth());
             player.getFoodData().setFoodLevel(20);
             player.removeAllEffects();
-
-            // 给予购买阶段无敌效果
+            
+            //player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, (ServerConfig.buyPhaseSeconds * 20) + 10, 255, false, false, false));
             player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, ServerConfig.buyPhaseSeconds * 20, 4, false, false, true));
 
-            // 传送到随机出生点
-            List<BlockPos> spawns = "CT".equals(stats.getTeam()) ? ctSpawns : tSpawns;
+            List<BlockPos> spawns = "CT".equals(team) ? ctSpawns : tSpawns;
+            
             if (spawns.isEmpty()) {
-                QisCSGO.LOGGER.error("比赛 '{}' 无法传送 {} 队玩家，因为没有设置出生点！", this.name, stats.getTeam());
-                player.sendSystemMessage(Component.literal("错误: " + stats.getTeam() + " 队没有设置出生点！请联系管理员。").withStyle(ChatFormatting.RED));
+                QisCSGO.LOGGER.error("比赛 '{}' 无法传送 {} 队玩家，因为没有设置出生点！", this.name, team);
+                player.sendSystemMessage(Component.literal("错误: " + team + " 队没有设置出生点！请联系管理员。").withStyle(ChatFormatting.RED));
                 continue;
             }
+            
             BlockPos spawnPos = spawns.get(random.nextInt(spawns.size()));
             player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, player.getYRot(), player.getXRot());
         }
     }
 
     /**
-     * 标记一名玩家在本回合中死亡，并检查回合是否因此结束。
-     *
+     * 选择性地清空玩家背包，保留货币、护甲等受保护物品。
+     * @param player 需要被清空背包的玩家。
+     */
+    private void performSelectiveClear(ServerPlayer player) {
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack stack = player.getInventory().getItem(i);
+            if (stack.isEmpty()) continue;
+
+            boolean isProtected = false;
+            for (String protectedItemString : ServerConfig.inventoryProtectedItems) {
+                if (ItemNBTHelper.idMatches(stack, protectedItemString)) {
+                    isProtected = true;
+                    break;
+                }
+            }
+
+            if (!isProtected) {
+                player.getInventory().setItem(i, ItemStack.EMPTY);
+            }
+        }
+    }
+
+    /**
+     * 在手枪局为玩家发放初始装备。
+     * @param player 接收装备的玩家。
+     * @param team 玩家所属队伍。
+     */
+    private void giveInitialGear(ServerPlayer player, String team) {
+        List<String> gearList = "CT".equals(team) ? ServerConfig.ctPistolRoundGear : ServerConfig.tPistolRoundGear;
+        for (String itemId : gearList) {
+            String command = "give " + player.getName().getString() + " " + itemId;
+            player.server.getCommands().performPrefixedCommand(player.server.createCommandSourceStack(), command);
+        }
+    }
+
+    /**
+     * 从T阵营中随机挑选一名玩家给予C4。
+     */
+    private void giveC4ToRandomT() {
+        List<ServerPlayer> tPlayers = playerStats.entrySet().stream()
+            .filter(e -> "T".equals(e.getValue().getTeam()))
+            .map(e -> server.getPlayerList().getPlayer(e.getKey()))
+            .filter(Objects::nonNull)
+            .toList(); 
+
+        if (!tPlayers.isEmpty()) {
+            ServerPlayer playerWithC4 = tPlayers.get(new Random().nextInt(tPlayers.size()));
+            playerWithC4.getInventory().add(new ItemStack(QisCSGO.C4_ITEM.get()));
+            playerWithC4.sendSystemMessage(Component.literal("§e你携带了C4炸弹！").withStyle(ChatFormatting.BOLD));
+        }
+        
+    }
+    
+    /**
+     * 在购买阶段生成商店村民。
+     *   生成的村民数量现在是每队人数的一半（向上取整，最少为1）。
+     */
+    private void spawnShops() {
+        removeShops();
+        int duration = ServerConfig.buyPhaseSeconds * 20;
+        Random random = new Random(); // 用于生成随机偏移量
+
+        // --- CT 商店生成逻辑 ---
+        if (ctShopPos != null) {
+            int ctShops = Math.max(1, (int) Math.ceil(getCtCount()));
+            for (int i = 0; i < ctShops; i++) {
+                double offsetX = random.nextDouble() - 0.5;
+                double offsetZ = random.nextDouble() - 0.5;
+                double spawnX = ctShopPos.getX() + 0.5 + offsetX;
+                double spawnY = ctShopPos.getY();
+                double spawnZ = ctShopPos.getZ() + 0.5 + offsetZ;
+
+                String command = String.format(Locale.US, "summon villager %.2f %.2f %.2f %s", 
+                                             spawnX, spawnY, spawnZ, ShopManager.getCtVillagerNbt(duration));
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
+            }
+        } else {
+            QisCSGO.LOGGER.warn("比赛 '{}': 尝试生成商店失败，因为CT商店位置未设置。", this.name);
+        }
+
+        // --- T 商店生成逻辑 ---
+        if (tShopPos != null) {
+            int tShops = Math.max(1, (int) Math.ceil(getTCount()));
+            for (int i = 0; i < tShops; i++) {
+                double offsetX = random.nextDouble() - 0.5;
+                double offsetZ = random.nextDouble() - 0.5;
+                double spawnX = tShopPos.getX() + 0.5 + offsetX;
+                double spawnY = tShopPos.getY();
+                double spawnZ = tShopPos.getZ() + 0.5 + offsetZ;
+                
+                String command = String.format(Locale.US, "summon villager %.2f %.2f %.2f %s", 
+                                             spawnX, spawnY, spawnZ, ShopManager.getTVillagerNbt(duration));
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
+            }
+        } else {
+            QisCSGO.LOGGER.warn("比赛 '{}': 尝试生成商店失败，因为T商店位置未设置。", this.name);
+        }
+    }
+
+    /**
+     * 移除商店村民。
+     */
+    private void removeShops() {
+        if (ctShopPos != null) server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill @e[type=minecraft:villager,distance=..2,x=" + ctShopPos.getX() + ",y=" + ctShopPos.getY() + ",z=" + ctShopPos.getZ() + "]");
+        if (tShopPos != null) server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill @e[type=minecraft:villager,distance=..2,x=" + tShopPos.getX() + ",y=" + tShopPos.getY() + ",z=" + tShopPos.getZ() + "]");
+    }
+
+    /**
+     * 结束购买阶段，进入战斗阶段。
+     */
+    private void beginRoundInProgress() {
+        this.roundState = RoundState.IN_PROGRESS;
+        this.tickCounter = this.roundTimeSeconds * 20;
+
+        //传送逻辑防止昂德皮偷跑
+        Random random = new Random();
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player == null) continue;
+
+            // 移除购买阶段的缓慢效果
+            //player.removeEffect(MobEffects.MOVEMENT_SLOWDOWN);
+
+            PlayerStats stats = getPlayerStats().get(playerUUID);
+            if (stats == null) continue;
+
+            // 根据玩家队伍获取相应的出生点列表
+            String team = stats.getTeam();
+            List<BlockPos> spawns = "CT".equals(team) ? ctSpawns : tSpawns;
+            
+            // 如果出生点列表不为空，则随机选择一个位置进行传送
+            if (!spawns.isEmpty()) {
+                BlockPos spawnPos = spawns.get(random.nextInt(spawns.size()));
+                player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, player.getYRot(), player.getXRot());
+            }
+        }
+        
+        recordAllPlayerGear();
+        
+        broadcastToAllPlayersInMatch(Component.literal("战斗开始！"));
+        QisCSGO.LOGGER.info("比赛 '{}': 进入战斗阶段。", name);
+        removeShops();
+    }
+
+    /**
+     * 记录所有玩家在战斗阶段开始时的装备，用于胜利后保留装备。
+     */
+    private void recordAllPlayerGear() {
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player == null) continue;
+            
+            PlayerStats stats = playerStats.get(playerUUID);
+            if (stats == null) continue;
+
+            List<ItemStack> currentGear = new ArrayList<>();
+            for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+                ItemStack stack = player.getInventory().getItem(i);
+                if (stack.isEmpty()) continue;
+                
+                boolean isProtected = ServerConfig.inventoryProtectedItems.stream()
+                                        .anyMatch(id -> ItemNBTHelper.idMatches(stack, id));
+                boolean isC4 = stack.getItem() == QisCSGO.C4_ITEM.get();
+
+                if (!isProtected && !isC4) {
+                    currentGear.add(stack.copy());
+                }
+            }
+            stats.setRoundGear(currentGear);
+        }
+    }
+
+    /**
+     * 结束当前回合的逻辑。
+     * @param winningTeam 获胜的队伍 ("CT" 或 "T")。
+     * @param reason 获胜的原因。
+     */
+    private void endRound(String winningTeam, String reason) {
+        if (this.roundState == RoundState.ROUND_END) return;
+        this.roundState = RoundState.ROUND_END;
+        this.lastRoundWinner = winningTeam;
+        
+        this.roundSurvivors.clear();
+        this.roundSurvivors.addAll(this.alivePlayers);
+        
+        if (winningTeam.equals("CT")) {
+            ctScore++;
+            broadcastToAllPlayersInMatch(Component.literal("CT方 胜利！ (" + reason + ")"));
+            playerStats.values().stream().filter(s -> "CT".equals(s.getTeam())).forEach(PlayerStats::resetConsecutiveLosses);
+            playerStats.values().stream().filter(s -> "T".equals(s.getTeam())).forEach(PlayerStats::incrementConsecutiveLosses);
+        } else {
+            tScore++;
+            broadcastToAllPlayersInMatch(Component.literal("T方 胜利！ (" + reason + ")"));
+            playerStats.values().stream().filter(s -> "T".equals(s.getTeam())).forEach(PlayerStats::resetConsecutiveLosses);
+            playerStats.values().stream().filter(s -> "CT".equals(s.getTeam())).forEach(PlayerStats::incrementConsecutiveLosses);
+        }
+        
+        QisCSGO.LOGGER.info("比赛 '{}': 第 {} 回合结束, {}方胜利. 比分 CT {}:{} T", name, currentRound, winningTeam, ctScore, tScore);
+
+        int roundsToWin = (this.totalRounds / 2) + 1;
+        if (ctScore >= roundsToWin || tScore >= roundsToWin) {
+            finishMatch(ctScore > tScore ? "CT" : "T");
+        } else if (currentRound >= totalRounds) {
+            if (ctScore == tScore) {
+                handleTie();
+            } else {
+                finishMatch(ctScore > tScore ? "CT" : "T");
+            }
+        } else {
+            this.tickCounter = ServerConfig.roundEndSeconds * 20;
+        }
+    }
+    
+    /**
+     * 在回合开始时为玩家发放收入。
+     */
+    private void distributeRoundIncome() {
+        boolean isPistolRound = (currentRound == 1 || currentRound == (totalRounds / 2) + 1);
+        
+        for (Map.Entry<UUID, PlayerStats> entry : playerStats.entrySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+            PlayerStats stats = entry.getValue();
+            if (player == null) continue;
+
+            if (isPistolRound) {
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "clear " + player.getName().getString() + " minecraft:diamond");
+                EconomyManager.giveMoney(player, ServerConfig.pistolRoundStartingMoney);
+                player.sendSystemMessage(Component.literal("手枪局！起始资金: " + ServerConfig.pistolRoundStartingMoney + " diamonds.").withStyle(ChatFormatting.AQUA));
+            } else {
+                boolean wasWinner = stats.getTeam().equals(this.lastRoundWinner);
+                int income;
+                if (wasWinner) {
+                    income = ServerConfig.winReward;
+                    player.sendSystemMessage(Component.literal("回合胜利！获得 " + income + " diamonds.").withStyle(ChatFormatting.GREEN));
+                } else {
+                    int lossBonus = Math.min(stats.getConsecutiveLosses() * ServerConfig.lossStreakBonus, ServerConfig.maxLossStreakBonus);
+                    income = ServerConfig.lossReward + lossBonus;
+                    player.sendSystemMessage(Component.literal("回合失败。获得 " + income + " diamonds (含连败奖励).").withStyle(ChatFormatting.RED));
+                }
+                EconomyManager.giveMoney(player, income);
+            }
+        }
+    }
+
+    /**
+     *   根据击杀数（主要）和死亡数（次要，越少越好）获取指定队伍的顶尖玩家列表。
+     * @param team 要查找的队伍 ("CT" 或 "T")。
+     * @param limit 返回的玩家数量上限。
+     * @return 包含玩家UUID和其统计数据的有序列表。
+     */
+    private List<Map.Entry<UUID, PlayerStats>> getRankedPlayers(String team, int limit) {
+        return playerStats.entrySet().stream()
+            .filter(entry -> team.equals(entry.getValue().getTeam()))
+            .sorted(Comparator.comparingInt((Map.Entry<UUID, PlayerStats> e) -> e.getValue().getKills())
+                          .reversed()
+                          .thenComparingInt(e -> e.getValue().getDeaths()))
+            .limit(limit)
+            .toList();
+    }
+    /**
+     * 查找并以特定格式广播比赛结束时的统计数据。
+     */
+    private void broadcastEndGameStats() {
+        // --- 用于格式化的常量 ---
+        final String SEPARATOR = "============================";
+        final String COLUMN_SPACER = "           ";
+        final int NAME_PADDING = 12; // 为玩家名字保留的字符宽度
+
+        // 获取双方队伍排名前3的玩家
+        List<Map.Entry<UUID, PlayerStats>> topCtPlayers = getRankedPlayers("CT", 3);
+        List<Map.Entry<UUID, PlayerStats>> topTPlayers = getRankedPlayers("T", 3);
+
+        // --- 开始广播 ---
+        broadcastToAllPlayersInMatch(Component.literal("")); // 发送空行
+        broadcastToAllPlayersInMatch(Component.literal(SEPARATOR).withStyle(ChatFormatting.GOLD));
+
+        // --- 比分行 ---
+        String scoreText = "                本场比分: " + ctScore + ":" + tScore;
+        broadcastToAllPlayersInMatch(Component.literal(scoreText).withStyle(ChatFormatting.WHITE, ChatFormatting.BOLD));
+
+        // --- 标题行 ---
+        Component header = Component.literal("CT击杀数排名").withStyle(ChatFormatting.BLUE)
+            .append(Component.literal(COLUMN_SPACER))
+            .append(Component.literal("T击杀数排名").withStyle(ChatFormatting.GOLD));
+        broadcastToAllPlayersInMatch(header);
+
+        // --- 玩家数据行 ---
+        int maxRows = Math.max(topCtPlayers.size(), topTPlayers.size());
+        if (maxRows == 0) {
+             broadcastToAllPlayersInMatch(Component.literal("本场比赛没有玩家数据。").withStyle(ChatFormatting.GRAY));
+        }
+
+        for (int i = 0; i < maxRows; i++) {
+            // 左侧 (CT)
+            String ctPlayerLine = "";
+            if (i < topCtPlayers.size()) {
+                Map.Entry<UUID, PlayerStats> entry = topCtPlayers.get(i);
+                ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+                if (player != null) {
+                    // 格式化字符串，使用 String.format 来补齐空格，以尽量对齐
+                    ctPlayerLine = String.format("%-" + NAME_PADDING + "." + NAME_PADDING + "s  %d", 
+                                                 player.getName().getString(), 
+                                                 entry.getValue().getKills());
+                }
+            }
+
+            // 右侧 (T)
+            String tPlayerLine = "";
+            if (i < topTPlayers.size()) {
+                Map.Entry<UUID, PlayerStats> entry = topTPlayers.get(i);
+                ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+                if (player != null) {
+                    tPlayerLine = String.format("%-" + NAME_PADDING + "." + NAME_PADDING + "s  %d", 
+                                                player.getName().getString(), 
+                                                entry.getValue().getKills());
+                }
+            }
+            
+            // 组合成一行并发送
+            // 为了对齐，我们需要计算左侧字符串占用的实际宽度，但这在MC中很难做到。
+            // 我们用一个固定的宽度来尝试对齐。
+            String leftPadded = String.format("%-18s", ctPlayerLine);
+            Component fullLine = Component.literal(leftPadded).withStyle(ChatFormatting.WHITE)
+                                    .append(Component.literal(tPlayerLine).withStyle(ChatFormatting.WHITE));
+
+            broadcastToAllPlayersInMatch(fullLine);
+        }
+
+        broadcastToAllPlayersInMatch(Component.literal(SEPARATOR).withStyle(ChatFormatting.GOLD));
+    }
+    /**
+     * 比赛结束后，重置所有玩家状态并将其传送至世界出生点。
+     */
+    private void resetAndTeleportPlayers() {
+        // 获取主世界的出生点坐标
+        BlockPos spawnPos = server.overworld().getSharedSpawnPos();
+
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player != null) {
+                // 设置为生存模式
+                player.setGameMode(GameType.SURVIVAL);
+                // 移除所有药水效果
+                player.removeAllEffects();
+                // 重置击退抗性
+                setPlayerKnockbackResistance(player, 0.0);
+                //清空玩家背包
+                player.getInventory().clearContent();
+                // 传送玩家
+                player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 0, 0);
+            }
+        }
+    }
+
+    /**
+     * 清理所有与本场比赛相关的服务器数据，如队伍和比赛实例。
+     */
+    private void cleanupMatchData() {
+        // 移除为本场比赛创建的队伍
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team remove " + ctTeamName);
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team remove " + tTeamName);
+
+        // 从比赛管理器中移除本场比赛
+        MatchManager.removeMatch(this.name);
+        
+        QisCSGO.LOGGER.info("比赛 '{}' 的数据已清理。", this.name);
+    }
+
+    /**
+     * 结束整场比赛。
+     * @param winningTeam 最终获胜的队伍。
+     */
+    private void finishMatch(String winningTeam) {
+        this.state = MatchState.FINISHED;
+        Component winner = Component.literal(winningTeam).withStyle(winningTeam.equals("CT") ? ChatFormatting.BLUE : ChatFormatting.GOLD);
+        broadcastToAllPlayersInMatch(Component.literal("比赛结束！胜利者是 ").append(winner).append("!"));
+        QisCSGO.LOGGER.info("比赛 '{}' 结束, {}方胜利.", name, winningTeam);
+        broadcastEndGameStats();//广播比赛结束时的统计数据
+        removeScoreboard();
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            setPlayerKnockbackResistance(player, 0.0);
+        }
+        resetAndTeleportPlayers();//传送玩家到世界出生点
+        cleanupMatchData();//清理比赛数据
+    }
+
+    /**
+     * 处理平局情况。
+     */
+    private void handleTie() {
+        this.state = MatchState.FINISHED;
+        broadcastToAllPlayersInMatch(Component.literal("比赛平局！"));
+        QisCSGO.LOGGER.info("比赛 '{}' 结束, 平局.", name);
+        broadcastEndGameStats();//广播比赛结束时的统计数据
+        removeScoreboard();
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            setPlayerKnockbackResistance(player, 0.0);
+        }
+        this.bossBar.removeAllPlayers();
+        resetAndTeleportPlayers();//传送玩家到世界出生点
+        cleanupMatchData();//清理比赛数据
+    }
+
+    /**
+     * 标记一名玩家在本回合中死亡。
      * @param deadPlayer 死亡的玩家。
      */
     public void markPlayerAsDead(ServerPlayer deadPlayer) {
         if (!this.alivePlayers.contains(deadPlayer.getUUID())) return;
-
-        // 记录死亡位置，用于队友观察
-        PlayerStats deadPlayerStats = getPlayerStats().get(deadPlayer.getUUID());
-        if (deadPlayerStats != null) {
-            this.lastTeammateDeathPos.put(deadPlayerStats.getTeam(), deadPlayer.blockPosition());
-        }
-
-        // 从存活玩家列表中移除
+        
+        // 记录死亡玩家的位置，用于观察视角
+        this.lastTeammateDeathPos.put(getPlayerStats().get(deadPlayer.getUUID()).getTeam(), deadPlayer.blockPosition());
+        
         this.alivePlayers.remove(deadPlayer.getUUID());
-        if (deadPlayerStats != null) deadPlayerStats.incrementDeaths();
-
+        PlayerStats stats = playerStats.get(deadPlayer.getUUID());
+        if(stats != null) stats.incrementDeaths();
+        
         QisCSGO.LOGGER.info("玩家 {} 在比赛 '{}' 中阵亡。", deadPlayer.getName().getString(), name);
-
-        // 将死亡玩家设为观察者模式并立即为其寻找观战目标
+        this.checkRoundEndCondition();//立即检查胜利条件
+        
+        // 将死亡玩家设为观察者模式
         deadPlayer.setGameMode(GameType.SPECTATOR);
+        
+        /// 立即为死亡玩家寻找一个观战目标
         findAndSetSpectatorTarget(deadPlayer);
-
-        // 检查回合是否结束
-        checkRoundEndCondition();
+        
+        this.checkRoundEndCondition();
+    }
+    
+    /**
+     * 锁定观察者视角到队友或最后死亡位置
+     * @param deadPlayer 死亡的玩家
+     */
+    private void lockSpectatorToTeammateOrLastPos(ServerPlayer deadPlayer) {
+        PlayerStats deadPlayerStats = getPlayerStats().get(deadPlayer.getUUID());
+        if (deadPlayerStats == null) return;
+        
+        String team = deadPlayerStats.getTeam();
+        
+        // 查找同队的存活玩家
+        ServerPlayer targetPlayer = null;
+        for (UUID playerUUID : this.alivePlayers) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player != null && player.gameMode.getGameModeForPlayer() == GameType.SURVIVAL) {
+                PlayerStats stats = playerStats.get(playerUUID);
+                if (stats != null && team.equals(stats.getTeam())) {
+                    targetPlayer = player;
+                    break;
+                }
+            }
+        }
+        
+        // 如果找到了同队的存活玩家，则锁定到该玩家
+        if (targetPlayer != null) {
+            deadPlayer.setCamera(targetPlayer);
+        } else {
+            // 如果没有找到同队存活玩家，则锁定到该队最后死亡位置的上空
+            BlockPos lastDeathPos = this.lastTeammateDeathPos.get(team);
+            if (lastDeathPos != null) {
+                deadPlayer.teleportTo(lastDeathPos.getX(), lastDeathPos.getY() + 10, lastDeathPos.getZ());
+            }
+        }
+    }
+    /**
+     * 更新所有观察者的视角目标
+     */
+    public void updateSpectatorCameras() {
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            
+            // 只处理处于观察者模式的玩家
+            if (player != null && player.isSpectator()) {
+                // 如果玩家正在附身自己（意味着他取消了附身），则为他寻找新目标
+                if (player.getCamera() == player) {
+                    findAndSetSpectatorTarget(player);
+                }
+            }
+        }
     }
 
     /**
+     * 为指定的观察者寻找并设置一个新的观战目标。
+     * 逻辑：随机附身存活队友 -> C4位置 -> 队伍出生点。
+     * @param spectator 需要设置目标的观察者玩家。
+     */
+    private void findAndSetSpectatorTarget(ServerPlayer spectator) {
+        PlayerStats spectatorStats = getPlayerStats().get(spectator.getUUID());
+        if (spectatorStats == null) return;
+        
+        String team = spectatorStats.getTeam();
+
+        // 1. 尝试寻找一个随机的、存活的队友
+        List<ServerPlayer> aliveTeammates = alivePlayers.stream()
+            .map(uuid -> server.getPlayerList().getPlayer(uuid))
+            .filter(p -> p != null && team.equals(getPlayerStats().get(p.getUUID()).getTeam()))
+            .collect(Collectors.toList());
+
+        if (!aliveTeammates.isEmpty()) {
+            // 找到了存活的队友，随机选择一个进行附身
+            ServerPlayer target = aliveTeammates.get(new Random().nextInt(aliveTeammates.size()));
+            spectator.setCamera(target);
+            return; // 任务完成，退出方法
+        }
+
+        // 2. 如果没有存活的队友，检查C4是否已安放
+        if (isC4Planted() && c4Pos != null) {
+            // 传送到C4上空10格的位置
+            spectator.teleportTo(server.overworld(), c4Pos.getX() + 0.5, c4Pos.getY() + 10, c4Pos.getZ() + 0.5, spectator.getYRot(), 90);
+            return;
+        }
+
+        // 3. 如果C4也未安放，则传送到队伍的一个随机出生点
+        List<BlockPos> spawns = "CT".equals(team) ? ctSpawns : tSpawns;
+        if (!spawns.isEmpty()) {
+            BlockPos spawnPos = spawns.get(new Random().nextInt(spawns.size()));
+            spectator.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, spectator.getYRot(), spectator.getXRot());
+        }
+    }
+    
+    /**
      * 处理玩家在比赛中重生的情况（强制设为观察者）。
-     *
      * @param respawningPlayer 重生的玩家。
      */
     public void handlePlayerRespawn(ServerPlayer respawningPlayer) {
         respawningPlayer.setGameMode(GameType.SPECTATOR);
-        findAndSetSpectatorTarget(respawningPlayer);
+        lockSpectatorToTeammateOrLastPos(respawningPlayer);
     }
-
+    
     /**
      * 检查回合是否因一方全部阵亡而结束。
      */
     private void checkRoundEndCondition() {
-        if (roundState != RoundState.IN_PROGRESS || playerStats.isEmpty() || currentRound == 0) return;
+        // 如果回合不是正在进行中，或者比赛已经没有玩家，则直接返回
+        if (roundState != RoundState.IN_PROGRESS || playerStats.isEmpty() || currentRound == 0) {
+            return;
+        }
 
-        // 统计双方存活人数
-        long aliveCtCount = alivePlayers.stream().filter(uuid -> "CT".equals(playerStats.get(uuid).getTeam())).count();
-        long aliveTCount = alivePlayers.stream().filter(uuid -> "T".equals(playerStats.get(uuid).getTeam())).count();
+        // 通过检查玩家的游戏模式来统计双方存活人数
+        long aliveCtCount = alivePlayers.stream().filter(uuid -> {
+            PlayerStats stats = playerStats.get(uuid);
+            ServerPlayer p = server.getPlayerList().getPlayer(uuid);
+            return stats != null && "CT".equals(stats.getTeam()) && p != null && p.gameMode.getGameModeForPlayer() == GameType.SURVIVAL;
+        }).count();
 
+        long aliveTCount = alivePlayers.stream().filter(uuid -> {
+            PlayerStats stats = playerStats.get(uuid);
+            ServerPlayer p = server.getPlayerList().getPlayer(uuid);
+            return stats != null && "T".equals(stats.getTeam()) && p != null && p.gameMode.getGameModeForPlayer() == GameType.SURVIVAL;
+        }).count();
+
+        // 如果C4已经安放，胜利逻辑会改变
         if (c4Planted) {
             // C4安放后，如果所有CT都阵亡了，T方立即获胜
             if (aliveCtCount == 0) {
                 endRound("T", "所有CT玩家阵亡");
             }
-            // 如果T方全部阵亡，回合会继续，直到C4爆炸或被拆除。
+            // 注意：如果此时T方全部阵亡，回合会继续，直到C4爆炸或被拆除。
+            // 这个胜利判断由 onC4Defused 和 onC4Exploded 处理，所以这里不需要写T方全灭的情况。
         } else {
             // 如果所有T都阵亡了，CT方获胜
             if (aliveTCount == 0) {
                 endRound("CT", "所有T玩家阵亡");
-            }
+            } 
             // 如果所有CT都阵亡了，T方获胜
             else if (aliveCtCount == 0) {
                 endRound("T", "所有CT玩家阵亡");
             }
         }
     }
-
-
-    // =================================================================================
-    // SECTION: C4 逻辑 (C4 Logic)
-    // =================================================================================
-
-    /**
-     * 当C4被安放时由 {@link com.qisumei.csgo.c4.item.C4Item} 调用。
-     *
-     * @param pos C4被安放的位置坐标。
-     */
-    public void onC4Planted(BlockPos pos) {
-        this.c4Planted = true;
-        this.c4Pos = pos;
-        this.tickCounter = C4_TIMER_TICKS; // 重置主计时器为C4倒计时
-        c4CountdownHandler.start(pos);
-
-        // 判断安放点
-        String siteName = "未知地点";
-        if (bombsiteA != null && bombsiteA.contains(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5)) {
-            siteName = "A点";
-        } else if (bombsiteB != null && bombsiteB.contains(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5)) {
-            siteName = "B点";
-        }
-
-        Component message = Component.literal("§e[信息] §f炸弹已安放在 §a" + siteName + "！");
-        broadcastToAllPlayersInMatch(message);
-    }
-
-    /**
-     * 当C4被成功拆除时由 {@link com.qisumei.csgo.c4.block.C4Block} 调用。
-     */
-    public void onC4Defused() {
-        if (this.roundState == RoundState.IN_PROGRESS) {
-            c4CountdownHandler.stop();
-            defusingPlayers.clear();
-            endRound("CT", "炸弹已被拆除");
-        }
-    }
-
-    /**
-     * 当C4爆炸时由 {@link C4CountdownHandler} 调用。
-     */
-    public void onC4Exploded() {
-        if (c4Pos != null) {
-            // 造成自定义的范围伤害
-            applyCustomExplosionDamage();
-
-            // [修复] SoundEvents API 变更
-            // playSound 需要一个实际的 SoundEvent 对象，而不是 Holder。
-            // 我们需要通过调用 .value() 来获取它。
-            server.overworld().playSound(null, c4Pos, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.BLOCKS, 4.0F, (1.0F + (server.overworld().random.nextFloat() - server.overworld().random.nextFloat()) * 0.2F) * 0.7F);
-            server.overworld().sendParticles(ParticleTypes.EXPLOSION_EMITTER, c4Pos.getX() + 0.5, c4Pos.getY() + 0.5, c4Pos.getZ() + 0.5, 2, 1.0, 1.0, 1.0, 0.0);
-        }
-        endRound("T", "炸弹已爆炸");
-    }
-
-    /**
-     * 在每tick中处理CT玩家的拆弹逻辑。
-     *
-     * @param player 正在被检测的玩家。
-     */
-    public void handlePlayerDefuseTick(ServerPlayer player) {
-        if (isPlayerEligibleToDefuse(player)) {
-            // 推进拆弹进度
-            int currentProgress = defusingPlayers.getOrDefault(player.getUUID(), 0) + 1;
-            defusingPlayers.put(player.getUUID(), currentProgress);
-
-            // 检查是否有拆弹器
-            boolean hasKit = player.getMainHandItem().is(Items.SHEARS) || player.getOffhandItem().is(Items.SHEARS);
-            int totalDefuseTime = hasKit ? DEFUSE_TIME_WITH_KIT_TICKS : DEFUSE_TIME_TICKS;
-
-            // 检查拆弹是否完成
-            if (currentProgress >= totalDefuseTime) {
-                defuseC4(player);
-            } else {
-                displayDefuseProgress(player, currentProgress, totalDefuseTime);
-            }
-        } else {
-            // 如果玩家不再满足拆弹条件，则重置其进度
-            if (defusingPlayers.remove(player.getUUID()) != null) {
-                player.sendSystemMessage(Component.literal(""), true); // 发送空消息来清除Action Bar
-            }
-        }
-    }
-
-
-    // =================================================================================
-    // SECTION: 辅助方法与Getters/Setters (Helpers & Getters/Setters)
-    // =================================================================================
-
-    // --- 比赛状态查询 ---
-    public String getName() { return name; }
-    public MatchState getState() { return state; }
-    public RoundState getRoundState() { return this.roundState; }
-    public int getMaxPlayers() { return maxPlayers; }
-    public int getPlayerCount() { return playerStats.size(); }
-    public String getCtTeamName() { return ctTeamName; }
-    public String getTTeamName() { return tTeamName; }
-    public Map<UUID, PlayerStats> getPlayerStats() { return playerStats; }
-    public long getCtCount() { return playerStats.values().stream().filter(s -> "CT".equals(s.getTeam())).count(); }
-    public long getTCount() { return playerStats.values().stream().filter(s -> "T".equals(s.getTeam())).count(); }
-    public MinecraftServer getServer() { return this.server; }
-    public boolean isC4Planted() { return this.c4Planted; }
-    public BlockPos getC4Pos() { return this.c4Pos; }
-    public Set<UUID> getAlivePlayers() { return this.alivePlayers; }
-
-    // --- 比赛设置修改 ---
-    public void setBombsiteA(AABB area) { this.bombsiteA = area; }
-    public void setBombsiteB(AABB area) { this.bombsiteB = area; }
-    public void addCtSpawn(BlockPos pos) { this.ctSpawns.add(pos); }
-    public void addTSpawn(BlockPos pos) { this.tSpawns.add(pos); }
-    public void setTotalRounds(int rounds) { this.totalRounds = rounds; }
-    public void setRoundTimeSeconds(int seconds) { this.roundTimeSeconds = seconds; }
-    public void setCtShopPos(BlockPos pos) { this.ctShopPos = pos; }
-    public void setTShopPos(BlockPos pos) { this.tShopPos = pos; }
-
-    // --- 内部辅助方法 ---
-
-    /**
-     * 将一名玩家添加到比赛中。
-     *
-     * @param player 要添加的玩家。
-     * @param team   玩家要加入的队伍 ("CT" 或 "T")。
-     */
-    public void addPlayer(ServerPlayer player, String team) {
-        playerStats.put(player.getUUID(), new PlayerStats(team));
-        reapplyScoreboardToPlayer(player);
-        this.bossBar.addPlayer(player);
-        setPlayerKnockbackResistance(player, 1000.0);
-    }
-
-    /**
-     * 从比赛中移除一名玩家。
-     *
-     * @param player 要移除的玩家。
-     */
-    public void removePlayer(ServerPlayer player) {
-        playerStats.remove(player.getUUID());
-        this.bossBar.removePlayer(player);
-        setPlayerKnockbackResistance(player, 0.0);
-    }
-
-    /**
-     * 将当前比赛的设置转换为一个MatchPreset对象，用于保存。
-     * @return 包含当前比赛设置的MatchPreset实例。
-     */
-    public MatchPreset toPreset() {
-        return new MatchPreset(this.ctSpawns, this.tSpawns, this.ctShopPos, this.tShopPos, this.bombsiteA, this.bombsiteB, this.totalRounds, this.roundTimeSeconds);
-    }
-
-    /**
-     * 从一个MatchPreset对象加载比赛设置。
-     * @param preset 包含比赛设置的预设对象。
-     */
-    public void applyPreset(MatchPreset preset) {
-        this.ctSpawns.clear();
-        this.ctSpawns.addAll(preset.ctSpawns());
-        this.tSpawns.clear();
-        this.tSpawns.addAll(preset.tSpawns());
-        this.ctShopPos = preset.ctShopPos();
-        this.tShopPos = preset.tShopPos();
-        this.bombsiteA = preset.bombsiteA();
-        this.bombsiteB = preset.bombsiteB();
-        this.totalRounds = preset.totalRounds();
-        this.roundTimeSeconds = preset.roundTimeSeconds();
-    }
-    
-    /**
-     * 向比赛中的所有玩家广播一条消息。
-     *
-     * @param message 要广播的消息组件。
-     */
-    public void broadcastToAllPlayersInMatch(Component message) {
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player != null) {
-                player.sendSystemMessage(message, false);
-            }
-        }
-    }
-
-    /**
-     * 向指定队伍的所有玩家广播一条消息。
-     *
+   /**
+     *   向指定队伍广播消息。
      * @param message 要广播的消息。
-     * @param team    目标队伍 ("CT" 或 "T")。
+     * @param team 目标队伍 ("CT" 或 "T")。
      */
     public void broadcastToTeam(Component message, String team) {
         for (Map.Entry<UUID, PlayerStats> entry : playerStats.entrySet()) {
@@ -731,406 +1036,82 @@ public class Match {
         }
     }
 
+    
     /**
-     * 从T阵营中随机挑选一名存活玩家给予C4。
+     * 当C4被安放时调用此方法。
+     * @param pos C4被安放的位置坐标。
      */
-    private void giveC4ToRandomT() {
-        List<ServerPlayer> aliveTPlayers = alivePlayers.stream()
-                .map(uuid -> server.getPlayerList().getPlayer(uuid))
-                .filter(p -> p != null && "T".equals(playerStats.get(p.getUUID()).getTeam()))
-                .collect(Collectors.toList());
+    public void onC4Planted(BlockPos pos) {
+        this.c4Planted = true;
+        this.c4Pos = pos;
+        this.tickCounter = 40 * 20;
+        c4CountdownHandler.start(pos);
 
-        if (!aliveTPlayers.isEmpty()) {
-            ServerPlayer playerWithC4 = aliveTPlayers.get(new Random().nextInt(aliveTPlayers.size()));
-            playerWithC4.getInventory().add(new ItemStack(QisCSGO.C4_ITEM.get()));
-            playerWithC4.sendSystemMessage(Component.literal("§e你携带了C4炸弹！").withStyle(ChatFormatting.BOLD));
+        String siteName = "未知地点";
+        if (bombsiteA != null && bombsiteA.contains(pos.getX(), pos.getY(), pos.getZ())) {
+            siteName = "A点";
+        } 
+        else if (bombsiteB != null && bombsiteB.contains(pos.getX(), pos.getY(), pos.getZ())) {
+            siteName = "B点";
+        }
+
+        Component message = Component.literal("§e[信息] §f炸弹已安放在 §a" + siteName + "！");
+        broadcastToAllPlayersInMatch(message);
+    }
+    
+    /**
+     * 当C4被拆除时调用。
+     */
+    public void onC4Defused() {
+        if (this.roundState == RoundState.IN_PROGRESS) {
+            // 关键修复：停止C4的倒计时！
+            c4CountdownHandler.stop();
+            
+            // 清理正在拆弹的玩家记录
+            defusingPlayers.clear();
+            
+            // 宣布CT胜利并结束回合
+            endRound("CT", "炸弹已被拆除");
         }
     }
 
     /**
-     * 在购买阶段开始时，为双方队伍生成商店村民。
+     * 当C4爆炸时调用。
      */
-    private void spawnShops() {
-        removeShops(); // 先移除旧的商店
-        int duration = ServerConfig.buyPhaseSeconds * 20;
-        Random random = new Random();
+    public void onC4Exploded() {
+    if (c4Pos != null) {
+        // --- 1. 应用自定义伤害 ---
+        applyCustomExplosionDamage();
 
-        // 生成CT商店
-        if (ctShopPos != null) {
-            int ctShopsToSpawn = Math.max(1, (int) Math.ceil(getCtCount() / 2.0));
-            for (int i = 0; i < ctShopsToSpawn; i++) {
-                double offsetX = random.nextDouble() * 2 - 1; // 在[-1, 1]范围内随机偏移
-                double offsetZ = random.nextDouble() * 2 - 1;
-                String command = String.format(Locale.US, "summon villager %.2f %.2f %.2f %s",
-                        ctShopPos.getX() + 0.5 + offsetX, (double) ctShopPos.getY(), ctShopPos.getZ() + 0.5 + offsetZ,
-                        ShopManager.getCtVillagerNbt(duration));
-                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
-            }
-        }
+        // --- 2. 播放声音和粒子效果 ---
+        double x = c4Pos.getX() + 0.5;
+        double y = c4Pos.getY() + 0.5;
+        double z = c4Pos.getZ() + 0.5;
 
-        // 生成T商店
-        if (tShopPos != null) {
-            int tShopsToSpawn = Math.max(1, (int) Math.ceil(getTCount() / 2.0));
-            for (int i = 0; i < tShopsToSpawn; i++) {
-                double offsetX = random.nextDouble() * 2 - 1;
-                double offsetZ = random.nextDouble() * 2 - 1;
-                String command = String.format(Locale.US, "summon villager %.2f %.2f %.2f %s",
-                        tShopPos.getX() + 0.5 + offsetX, (double) tShopPos.getY(), tShopPos.getZ() + 0.5 + offsetZ,
-                        ShopManager.getTVillagerNbt(duration));
-                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
-            }
-        }
+        server.overworld().playSound(
+                null,
+                c4Pos,
+                SoundEvents.GENERIC_EXPLODE.value(), // ✅ 取出实际 SoundEvent
+                SoundSource.BLOCKS,
+                4.0F,
+                (1.0F + (server.overworld().random.nextFloat() - server.overworld().random.nextFloat()) * 0.2F) * 0.7F
+        );
+
+        server.overworld().sendParticles(
+                ParticleTypes.EXPLOSION_EMITTER,
+                x, y, z,
+                2,
+                1.0, 1.0, 1.0,
+                0.0
+        );
     }
 
+    // 结束回合
+    endRound("T", "炸弹已爆炸");
+}
+    
     /**
-     * 移除所有商店村民。
-     */
-    private void removeShops() {
-        // 使用一个较大的范围来确保所有分散的商店都被移除
-        if (ctShopPos != null)
-            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill @e[type=minecraft:villager,distance=..5,x=" + ctShopPos.getX() + ",y=" + ctShopPos.getY() + ",z=" + ctShopPos.getZ() + "]");
-        if (tShopPos != null)
-            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill @e[type=minecraft:villager,distance=..5,x=" + tShopPos.getX() + ",y=" + tShopPos.getY() + ",z=" + tShopPos.getZ() + "]");
-    }
-
-    /**
-     * 在战斗阶段开始时，记录所有存活玩家的装备。
-     */
-    private void recordAllPlayerGear() {
-        for (UUID playerUUID : alivePlayers) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player == null) continue;
-
-            PlayerStats stats = playerStats.get(playerUUID);
-            if (stats == null) continue;
-
-            List<ItemStack> currentGear = new ArrayList<>();
-            for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-                ItemStack stack = player.getInventory().getItem(i);
-                if (!stack.isEmpty() && !ItemNBTHelper.isSameBaseItem(stack, "minecraft:diamond") && !stack.is(QisCSGO.C4_ITEM.get())) {
-                    currentGear.add(stack.copy());
-                }
-            }
-            stats.setRoundGear(currentGear);
-        }
-    }
-
-    /**
-     * 在每回合开始时为玩家发放金钱。
-     */
-    private void distributeRoundIncome() {
-        boolean isPistolRound = (currentRound == 1 || currentRound == (totalRounds / 2) + 1);
-
-        for (Map.Entry<UUID, PlayerStats> entry : playerStats.entrySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
-            PlayerStats stats = entry.getValue();
-            if (player == null) continue;
-
-            if (isPistolRound) {
-                // 手枪局，清空钻石并发放固定起始资金
-                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "clear " + player.getName().getString() + " minecraft:diamond");
-                EconomyManager.giveMoney(player, ServerConfig.pistolRoundStartingMoney);
-            } else {
-                // 根据上回合胜负发放奖励
-                boolean wasWinner = stats.getTeam().equals(this.lastRoundWinner);
-                int income;
-                if (wasWinner) {
-                    income = ServerConfig.winReward;
-                } else {
-                    int lossBonus = Math.min(stats.getConsecutiveLosses() * ServerConfig.lossStreakBonus, ServerConfig.maxLossStreakBonus);
-                    income = ServerConfig.lossReward + lossBonus;
-                }
-                EconomyManager.giveMoney(player, income);
-            }
-        }
-    }
-
-    /**
-     * 选择性地清空玩家背包，保留受保护的物品（如货币、护甲）。
-     */
-    private void performSelectiveClear(ServerPlayer player) {
-        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-            ItemStack stack = player.getInventory().getItem(i);
-            if (stack.isEmpty()) continue;
-
-            boolean isProtected = ServerConfig.inventoryProtectedItems.stream()
-                    .anyMatch(id -> ItemNBTHelper.isSameBaseItem(stack, id));
-
-            if (!isProtected) {
-                player.getInventory().setItem(i, ItemStack.EMPTY);
-            }
-        }
-    }
-
-    /**
-     * 在手枪局为玩家发放初始装备。
-     */
-    private void giveInitialGear(ServerPlayer player, String team) {
-        List<String> gearList = "CT".equals(team) ? ServerConfig.ctPistolRoundGear : ServerConfig.tPistolRoundGear;
-        for (String itemCommandString : gearList) {
-            String command = "give " + player.getName().getString() + " " + itemCommandString;
-            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
-        }
-    }
-
-    /**
-     * 在半场时交换双方队伍，并重置玩家状态。
-     */
-    private void swapTeams() {
-        broadcastToAllPlayersInMatch(Component.literal("半场换边！队伍已交换。").withStyle(ChatFormatting.YELLOW));
-        // 交换比分
-        int tempScore = this.ctScore;
-        this.ctScore = this.tScore;
-        this.tScore = tempScore;
-
-        for (Map.Entry<UUID, PlayerStats> entry : playerStats.entrySet()) {
-            PlayerStats stats = entry.getValue();
-            String oldTeam = stats.getTeam();
-            String newTeam = "CT".equals(oldTeam) ? "T" : "CT";
-            stats.setTeam(newTeam);
-
-            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
-            if (player != null) {
-                // 更新玩家在游戏内的队伍
-                String newTeamName = "CT".equals(newTeam) ? getCtTeamName() : getTTeamName();
-                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team leave " + player.getName().getString());
-                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team join " + newTeamName + " " + player.getName().getString());
-                
-                // 清理背包并发放提示
-                performSelectiveClear(player);
-                player.sendSystemMessage(Component.literal("你现在是 " + ("CT".equals(newTeam) ? "反恐精英 (CT)" : "恐怖分子 (T)") + " 队的一员！").withStyle(ChatFormatting.AQUA));
-            }
-        }
-    }
-
-    /**
-     * 传送所有玩家到他们队伍的随机出生点。
-     */
-    private void teleportPlayersToSpawns() {
-        Random random = new Random();
-        for (UUID playerUUID : alivePlayers) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player == null) continue;
-            PlayerStats stats = playerStats.get(playerUUID);
-            if (stats == null) continue;
-
-            List<BlockPos> spawns = "CT".equals(stats.getTeam()) ? ctSpawns : tSpawns;
-            if (!spawns.isEmpty()) {
-                BlockPos spawnPos = spawns.get(random.nextInt(spawns.size()));
-                player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, player.getYRot(), player.getXRot());
-            }
-        }
-    }
-
-    /**
-     * 在购买阶段检查玩家是否超出了购买区域。
-     */
-    private void checkPlayerBuyZone() {
-        Random random = new Random();
-        for (UUID playerUUID : alivePlayers) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player == null) continue;
-
-            PlayerStats stats = playerStats.get(playerUUID);
-            String team = stats.getTeam();
-            BlockPos shopPos = "CT".equals(team) ? ctShopPos : tShopPos;
-            List<BlockPos> spawns = "CT".equals(team) ? ctSpawns : tSpawns;
-
-            if (shopPos != null && !spawns.isEmpty()) {
-                double distance = Math.sqrt(player.distanceToSqr(shopPos.getX() + 0.5, player.getY(), shopPos.getZ() + 0.5));
-                if (distance > BUY_ZONE_MAX_DISTANCE) {
-                    BlockPos spawnPos = spawns.get(random.nextInt(spawns.size()));
-                    player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, player.getYRot(), player.getXRot());
-                    player.sendSystemMessage(Component.literal("购买阶段请不要离开购买区域！").withStyle(ChatFormatting.RED), true);
-                }
-            }
-        }
-    }
-
-    /**
-     * 每tick检查C4是否掉落，并向T阵营广播其位置和距离。
-     */
-    private void tickC4DropLocation() {
-        ItemEntity droppedC4 = findDroppedC4();
-        if (droppedC4 != null) {
-            // 定时向全队广播坐标
-            if (c4BroadcastCooldown <= 0) {
-                c4BroadcastCooldown = C4_BROADCAST_COOLDOWN_TICKS;
-                BlockPos c4DropPos = droppedC4.blockPosition();
-                Component message = Component.literal("C4掉落在: " + c4DropPos.getX() + ", " + c4DropPos.getY() + ", " + c4DropPos.getZ()).withStyle(ChatFormatting.YELLOW);
-                broadcastToTeam(message, "T");
-            }
-            c4BroadcastCooldown--;
-
-            // 持续向每个T显示距离
-            for (UUID playerUUID : alivePlayers) {
-                ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-                if (player != null && "T".equals(playerStats.get(playerUUID).getTeam())) {
-                    double distance = player.distanceTo(droppedC4);
-                    String distanceString = String.format("%.1f", distance);
-                    Component distanceMessage = Component.literal("距离C4: " + distanceString + "米").withStyle(ChatFormatting.YELLOW);
-                    player.sendSystemMessage(distanceMessage, true);
-                }
-            }
-        } else {
-            c4BroadcastCooldown = 0;
-        }
-    }
-
-    /**
-     * 清理比赛区域内的所有掉落物品。
-     */
-    private void clearDroppedItems() {
-        // 构建一个包含所有关键点的AABB
-        List<BlockPos> allKeyPositions = new ArrayList<>();
-        allKeyPositions.addAll(ctSpawns);
-        allKeyPositions.addAll(tSpawns);
-        if (bombsiteA != null) {
-            allKeyPositions.add(BlockPos.containing(bombsiteA.getCenter()));
-        }
-        if (bombsiteB != null) {
-            allKeyPositions.add(BlockPos.containing(bombsiteB.getCenter()));
-        }
-
-        if (allKeyPositions.isEmpty()) return;
-
-        // [修复] Lambda 表达式中的变量必须是 final 或 effectively final
-        // 创建一个临时的、可变的 AABB 用于构建
-        AABB tempSearchBox = new AABB(allKeyPositions.get(0));
-        for (BlockPos pos : allKeyPositions) {
-            tempSearchBox = tempSearchBox.minmax(new AABB(pos));
-        }
-        if (bombsiteA != null) {
-            tempSearchBox = tempSearchBox.minmax(bombsiteA);
-        }
-        if (bombsiteB != null) {
-            tempSearchBox = tempSearchBox.minmax(bombsiteB);
-        }
-        
-        // 将最终构建好的 AABB 赋值给一个 final 变量，以便在 lambda 中使用
-        final AABB searchBox = tempSearchBox.inflate(100.0);
-
-        // 获取并移除区域内的所有ItemEntity
-        List<ItemEntity> itemsToRemove = server.overworld().getEntitiesOfClass(ItemEntity.class, searchBox, (e) -> true);
-        itemsToRemove.forEach(ItemEntity::discard);
-        QisCSGO.LOGGER.info("比赛 '{}': 清理了 {} 个掉落物品。", this.name, itemsToRemove.size());
-    }
-
-    /**
-     * 为指定的观察者寻找并设置一个新的观战目标。
-     * 优先级：存活队友 -> C4位置 -> 队伍出生点。
-     */
-    private void findAndSetSpectatorTarget(ServerPlayer spectator) {
-        PlayerStats spectatorStats = getPlayerStats().get(spectator.getUUID());
-        if (spectatorStats == null) return;
-        String team = spectatorStats.getTeam();
-
-        // 1. 寻找随机的存活队友
-        List<ServerPlayer> aliveTeammates = alivePlayers.stream()
-                .map(uuid -> server.getPlayerList().getPlayer(uuid))
-                .filter(p -> p != null && team.equals(getPlayerStats().get(p.getUUID()).getTeam()))
-                .collect(Collectors.toList());
-
-        if (!aliveTeammates.isEmpty()) {
-            spectator.setCamera(aliveTeammates.get(new Random().nextInt(aliveTeammates.size())));
-            return;
-        }
-
-        // 2. 如果没有队友，则飞向C4位置上空
-        if (isC4Planted() && c4Pos != null) {
-            spectator.teleportTo(server.overworld(), c4Pos.getX() + 0.5, c4Pos.getY() + 10, c4Pos.getZ() + 0.5, spectator.getYRot(), 90);
-            return;
-        }
-
-        // 3. 如果C4也未安放，则飞向随机出生点
-        List<BlockPos> spawns = "CT".equals(team) ? ctSpawns : tSpawns;
-        if (!spawns.isEmpty()) {
-            BlockPos spawnPos = spawns.get(new Random().nextInt(spawns.size()));
-            spectator.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, spectator.getYRot(), spectator.getXRot());
-        }
-    }
-
-    /**
-     * 每tick更新所有观察者的视角，确保他们附身在有效目标上。
-     */
-    private void updateSpectatorCameras() {
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player != null && player.isSpectator()) {
-                // 如果观察者没有附身在任何实体上（例如，他们手动脱离了），为他们重新寻找目标
-                if (player.getCamera() == player) {
-                    findAndSetSpectatorTarget(player);
-                }
-            }
-        }
-    }
-
-    /**
-     * 检查一个玩家是否满足所有开始拆弹的条件。
-     */
-    private boolean isPlayerEligibleToDefuse(ServerPlayer player) {
-        if (!this.c4Planted) return false;
-        PlayerStats stats = playerStats.get(player.getUUID());
-        if (stats == null || !"CT".equals(stats.getTeam())) return false;
-        if (!player.isCrouching()) return false;
-
-        // 光线追踪检查玩家是否正对着C4
-        BlockHitResult hitResult = player.level().clip(new ClipContext(
-                player.getEyePosition(),
-                player.getEyePosition().add(player.getLookAngle().scale(5)), // 检查5格距离
-                ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
-
-        return hitResult.getType() == HitResult.Type.BLOCK && hitResult.getBlockPos().equals(this.c4Pos);
-    }
-
-    /**
-     * 在玩家的Action Bar上显示拆弹进度。
-     */
-    private void displayDefuseProgress(ServerPlayer player, int currentProgress, int totalProgress) {
-        int barsFilled = (int) (((float) currentProgress / totalProgress) * 10);
-        StringBuilder progressBar = new StringBuilder("§a[");
-        progressBar.append("|".repeat(barsFilled));
-        progressBar.append("§7-".repeat(10 - barsFilled));
-        progressBar.append("§a]");
-        Component message = Component.literal("拆除中... ").append(Component.literal(progressBar.toString()));
-        player.sendSystemMessage(message, true);
-    }
-
-    /**
-     * 执行C4的最终拆除逻辑。
-     */
-    private void defuseC4(ServerPlayer player) {
-        if (c4Pos != null) {
-            // 移除C4方块，这将触发 onRemove -> onC4Defused -> endRound
-            server.overworld().removeBlock(c4Pos, false);
-            broadcastToAllPlayersInMatch(Component.literal("§b" + player.getName().getString() + " §f已经拆除了炸弹！"));
-        }
-    }
-
-    /**
-     * 应用自定义的C4爆炸伤害。
-     */
-    private void applyCustomExplosionDamage() {
-        if (c4Pos == null) return;
-        DamageSource damageSource = server.overworld().damageSources().genericKill();
-
-        for (UUID playerUUID : alivePlayers) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player == null) continue;
-
-            double distance = Math.sqrt(player.distanceToSqr(c4Pos.getX() + 0.5, c4Pos.getY() + 0.5, c4Pos.getZ() + 0.5));
-            if (distance < C4_EXPLOSION_RADIUS) {
-                float damageFalloff = (float) (1.0 - distance / C4_EXPLOSION_RADIUS);
-                float damageToApply = C4_EXPLOSION_MAX_DAMAGE * damageFalloff;
-                if (damageToApply > 0) {
-                    player.hurt(damageSource, damageToApply);
-                }
-            }
-        }
-    }
-
-    /**
-     * 在新回合开始时重置C4相关的所有状态。
+     * 在新回合开始时重置C4的状态。
      */
     private void resetC4State() {
         if (c4Planted && c4Pos != null) {
@@ -1141,25 +1122,114 @@ public class Match {
         this.c4Planted = false;
         this.c4Pos = null;
     }
+    
+    /**
+     * 检查一个玩家是否在任何一个包点内。
+     * @param player 要检查的玩家。
+     * @return 如果玩家在包点内则返回true。
+     */
+    public boolean isPlayerInBombsite(ServerPlayer player) {
+        return (bombsiteA != null && bombsiteA.contains(player.position())) || (bombsiteB != null && bombsiteB.contains(player.position()));
+    }
+    
+    /**
+     * 检查一个坐标是否在任何一个包点内。
+     * @param pos 要检查的坐标。
+     * @return 如果坐标在包点内则返回true。
+     */
+    public boolean isPosInBombsite(BlockPos pos) {
+        return (bombsiteA != null && bombsiteA.contains(pos.getX(), pos.getY(), pos.getZ())) || (bombsiteB != null && bombsiteB.contains(pos.getX(), pos.getY(), pos.getZ()));
+    }
 
     /**
-     * 初始化比赛计分板。
+     * 向比赛中的所有玩家广播一条消息。
+     * @param message 要广播的消息组件。
+     */
+    public void broadcastToAllPlayersInMatch(Component message) {
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player != null) {
+                player.sendSystemMessage(message, false);
+            }
+        }
+    }
+
+    /**
+     * 应用自定义的C4爆炸伤害，使用 genericKill 伤害源以避免任何爆炸相关的副作用。
+     */
+    private void applyCustomExplosionDamage() {
+        if (c4Pos == null) return;
+
+        final double explosionRadius = 16.0;
+        final float maxDamage = 100.0f;
+
+        double explosionX = c4Pos.getX() + 0.5;
+        double explosionY = c4Pos.getY() + 0.5;
+        double explosionZ = c4Pos.getZ() + 0.5;
+
+        // 使用一个不会触发额外逻辑的通用伤害源
+        DamageSource damageSource = server.overworld().damageSources().genericKill();
+
+        for (UUID playerUUID : alivePlayers) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player == null) continue;
+
+            double distanceSq = player.distanceToSqr(explosionX, explosionY, explosionZ);
+
+            if (distanceSq < explosionRadius * explosionRadius) {
+                double distance = Math.sqrt(distanceSq);
+                float damageFalloff = (float) (1.0 - distance / explosionRadius);
+                float damageToApply = maxDamage * damageFalloff;
+
+                if (damageToApply > 0) {
+                    player.hurt(damageSource, damageToApply);
+                }
+            }
+        }
+    }
+    
+    /**
+     * 由管理员强制结束比赛。
+     */
+    public void forceEnd() {
+        this.state = MatchState.FINISHED;
+        broadcastToAllPlayersInMatch(Component.literal("比赛已被管理员强制结束。"));
+        removeShops();
+        removeScoreboard();
+        this.bossBar.removeAllPlayers();
+
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player != null) {
+                player.setGameMode(server.getDefaultGameType());
+                setPlayerKnockbackResistance(player, 0.0);
+                player.removeAllEffects();
+            }
+        }
+        resetAndTeleportPlayers();//传送玩家到世界出生点
+        cleanupMatchData();
+    }
+
+    /**
+     * 创建比赛计分板。
      */
     private void setupScoreboard() {
         this.scoreboard = server.getScoreboard();
         String safeMatchName = name.replaceAll("[^a-zA-Z0-9_.-]", "");
         String objectiveName = "kda_" + safeMatchName.substring(0, Math.min(safeMatchName.length(), 12));
-
-        // 如果已存在同名计分项，先移除
-        Optional.ofNullable(this.scoreboard.getObjective(objectiveName)).ifPresent(this.scoreboard::removeObjective);
+        
+        Objective oldObjective = this.scoreboard.getObjective(objectiveName);
+        if (oldObjective != null) {
+            this.scoreboard.removeObjective(oldObjective);
+        }
 
         this.objective = this.scoreboard.addObjective(
-                objectiveName,
-                ObjectiveCriteria.DUMMY,
-                Component.literal("比赛排名").withStyle(ChatFormatting.YELLOW),
-                ObjectiveCriteria.RenderType.INTEGER,
-                true,
-                null
+            objectiveName, 
+            ObjectiveCriteria.DUMMY, 
+            Component.literal("比赛排名").withStyle(ChatFormatting.YELLOW), 
+            ObjectiveCriteria.RenderType.INTEGER, 
+            true, 
+            null
         );
         this.scoreboard.setDisplayObjective(DisplaySlot.SIDEBAR, this.objective);
     }
@@ -1170,54 +1240,50 @@ public class Match {
     private void updateScoreboard() {
         if (this.objective == null || this.scoreboard == null) return;
 
-        // 定期完整重建计分板，以移除已离开的玩家
-        if (++scoreboardRebuildCounter >= SCOREBOARD_REBUILD_INTERVAL_TICKS) {
+        scoreboardRebuildCounter++;
+        if (scoreboardRebuildCounter >= 200) { 
             rebuildScoreboard();
             scoreboardRebuildCounter = 0;
             return;
         }
 
-        // 仅更新在榜玩家的分数
-        playerStats.forEach((uuid, stats) -> {
-            ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+        List<Map.Entry<UUID, PlayerStats>> sortedPlayers = playerStats.entrySet().stream()
+            .sorted(Comparator.comparingInt((Map.Entry<UUID, PlayerStats> e) -> e.getValue().getKills()).reversed()
+            .thenComparingInt(e -> e.getValue().getDeaths()))
+            .limit(15)
+            .toList();
+
+        for (Map.Entry<UUID, PlayerStats> entry : sortedPlayers) {
+            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
             if (player != null) {
-                // 新 API: 直接获取或创建分数并设置
-                // 第三个参数 true 表示如果分数不存在则创建
-                this.scoreboard.getOrCreatePlayerScore(player, this.objective, true).set(stats.getKills());
+                this.scoreboard.getOrCreatePlayerScore(player, this.objective).set(entry.getValue().getKills());
             }
-        });
+        }
     }
 
     /**
- * 完整重建计分板，清除所有旧条目并添加当前所有玩家。
- * 这是为了处理玩家离线后计分板条目残留的问题。
- */
-private void rebuildScoreboard() {
-    if (this.objective == null || this.scoreboard == null) return;
-
-    // [修复] Scoreboard API 变更 - 1.21.1 版本
-    // 获取所有当前计分项的分数条目
-    Collection<PlayerScoreEntry> scores = scoreboard.listPlayerScores(this.objective);
-
-    // [修复] 遍历副本并移除每个分数条目
-    // 在 1.21.1 中，PlayerScoreEntry.owner() 返回 String，但我们需要 ScoreHolder
-    // 使用 ScoreHolder.forNameOnly() 来创建 ScoreHolder
-    new ArrayList<>(scores).forEach(score -> {
-        // 使用 ScoreHolder.forNameOnly 将字符串转换为 ScoreHolder
-        ScoreHolder scoreHolder = ScoreHolder.forNameOnly(score.owner());
-        scoreboard.resetSinglePlayerScore(scoreHolder, this.objective);
-    });
-
-    // 重新添加当前所有玩家的分数
-    playerStats.forEach((uuid, stats) -> {
-        ServerPlayer player = server.getPlayerList().getPlayer(uuid);
-        if (player != null) {
-            this.scoreboard.getOrCreatePlayerScore(player, this.objective, true).set(stats.getKills());
-        }
-    });
-
-    QisCSGO.LOGGER.debug("重建计分板: {}", this.objective.getName());
-}
+     * 定期重建计分板以移除已离开玩家的条目。
+     */
+    private void rebuildScoreboard() {
+        if (this.objective == null || this.scoreboard == null) return;
+        
+        String objectiveName = this.objective.getName();
+        Component displayName = this.objective.getDisplayName();
+        
+        this.scoreboard.removeObjective(this.objective);
+        
+        this.objective = this.scoreboard.addObjective(
+            objectiveName, 
+            ObjectiveCriteria.DUMMY, 
+            displayName, 
+            ObjectiveCriteria.RenderType.INTEGER, 
+            true, 
+            null
+        );
+        this.scoreboard.setDisplayObjective(DisplaySlot.SIDEBAR, this.objective);
+        
+        QisCSGO.LOGGER.debug("重建计分板: {}", objectiveName);
+    }
 
     /**
      * 在比赛结束时移除计分板。
@@ -1225,219 +1291,350 @@ private void rebuildScoreboard() {
     private void removeScoreboard() {
         if (this.scoreboard != null && this.objective != null) {
             this.scoreboard.setDisplayObjective(DisplaySlot.SIDEBAR, null);
-            Optional.ofNullable(this.scoreboard.getObjective(this.objective.getName()))
-                    .ifPresent(this.scoreboard::removeObjective);
+            Objective currentObjective = this.scoreboard.getObjective(this.objective.getName());
+            if (currentObjective != null) {
+                this.scoreboard.removeObjective(currentObjective);
+            }
             this.objective = null;
         }
     }
 
     /**
-     * 为指定玩家重新应用计分板，主要用于玩家重连。
+     * 清理比赛区域内所有掉落的物品实体。
+     */
+    private void clearDroppedItems() {
+        List<BlockPos> allPositions = new ArrayList<>();
+        allPositions.addAll(ctSpawns);
+        allPositions.addAll(tSpawns);
+        if (bombsiteA != null) {
+            allPositions.add(BlockPos.containing(bombsiteA.minX, bombsiteA.minY, bombsiteA.minZ));
+            allPositions.add(BlockPos.containing(bombsiteA.maxX, bombsiteA.maxY, bombsiteA.maxZ));
+        }
+        if (bombsiteB != null) {
+            allPositions.add(BlockPos.containing(bombsiteB.minX, bombsiteB.minY, bombsiteB.minZ));
+            allPositions.add(BlockPos.containing(bombsiteB.maxX, bombsiteB.maxY, bombsiteB.maxZ));
+        }
+
+        if (allPositions.isEmpty()) {
+            return;
+        }
+
+        double minX = allPositions.getFirst().getX();
+        double minY = allPositions.getFirst().getY();
+        double minZ = allPositions.getFirst().getZ();
+        
+        double maxX = minX;
+        double maxY = minY;
+        double maxZ = minZ;
+
+        for (BlockPos pos : allPositions) {
+            minX = Math.min(minX, pos.getX());
+            minY = Math.min(minY, pos.getY());
+            minZ = Math.min(minZ, pos.getZ());
+            maxX = Math.max(maxX, pos.getX());
+            maxY = Math.max(maxY, pos.getY());
+            maxZ = Math.max(maxZ, pos.getZ());
+        }
+
+        AABB matchArea = new AABB(minX - 50, minY - 20, minZ - 50, maxX + 50, maxY + 20, maxZ + 50);
+
+        List<ItemEntity> itemsToRemove = server.overworld().getEntitiesOfClass(ItemEntity.class, matchArea, (entity) -> true);
+
+        for (ItemEntity itemEntity : itemsToRemove) {
+            itemEntity.discard();
+        }
+
+        QisCSGO.LOGGER.info("比赛 '{}': 清理了 {} 个掉落物品。", this.name, itemsToRemove.size());
+    }
+
+    /**
+     * 为指定玩家重新应用计分板。
+     * @param player 需要接收计分板信息的玩家。
      */
     public void reapplyScoreboardToPlayer(ServerPlayer player) {
         if (this.scoreboard != null && this.objective != null) {
             this.scoreboard.setDisplayObjective(DisplaySlot.SIDEBAR, this.objective);
+            PlayerStats stats = this.playerStats.get(player.getUUID());
+            int currentKills = (stats != null) ? stats.getKills() : 0;
+            this.scoreboard.getOrCreatePlayerScore(player, this.objective).set(currentKills);
         }
     }
-
+    
     /**
      * 更新Boss栏的显示内容和进度。
      */
     private void updateBossBar() {
-        float progress = 1.0f;
-        String text = "比赛暂停";
-        BossEvent.BossBarColor color = BossEvent.BossBarColor.PURPLE;
-
         switch (this.roundState) {
-            case BUY_PHASE -> {
-                progress = (float) this.tickCounter / (ServerConfig.buyPhaseSeconds * 20);
-                text = "购买阶段剩余: " + (this.tickCounter / 20 + 1) + "s";
-                color = BossEvent.BossBarColor.GREEN;
-            }
-            case IN_PROGRESS -> {
+            case BUY_PHASE:
+                int buyPhaseTotalTicks = ServerConfig.buyPhaseSeconds * 20;
+                float buyProgress = (float) this.tickCounter / buyPhaseTotalTicks;
+                this.bossBar.setName(Component.literal("购买阶段剩余: " + (this.tickCounter / 20 + 1) + "s"));
+                this.bossBar.setColor(BossEvent.BossBarColor.GREEN);
+                this.bossBar.setProgress(buyProgress);
+                break;
+
+            case IN_PROGRESS:
                 if (this.c4Planted) {
-                    progress = (float) this.tickCounter / C4_TIMER_TICKS;
-                    text = "§c§lC4即将爆炸: " + (this.tickCounter / 20 + 1) + "s";
-                    color = BossEvent.BossBarColor.RED;
+                    int c4TotalTicks = 40 * 20;
+                    float c4Progress = (float) this.tickCounter / c4TotalTicks;
+                    this.bossBar.setName(Component.literal("C4即将爆炸: " + (this.tickCounter / 20 + 1) + "s").withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
+                    this.bossBar.setColor(BossEvent.BossBarColor.RED);
+                    this.bossBar.setProgress(c4Progress);
                 } else {
-                    progress = (float) this.tickCounter / (this.roundTimeSeconds * 20);
-                    text = "回合剩余时间: " + (this.tickCounter / 20 + 1) + "s";
-                    color = BossEvent.BossBarColor.WHITE;
+                    int roundTotalTicks = this.roundTimeSeconds * 20;
+                    float roundProgress = (float) this.tickCounter / roundTotalTicks;
+                    this.bossBar.setName(Component.literal("回合剩余时间: " + (this.tickCounter / 20 + 1) + "s"));
+                    this.bossBar.setColor(BossEvent.BossBarColor.WHITE);
+                    this.bossBar.setProgress(roundProgress);
                 }
-            }
-            case ROUND_END -> {
-                text = "回合结束";
-                color = BossEvent.BossBarColor.YELLOW;
-            }
-            // [修复] 统一使用箭头表达式
-            case PAUSED -> {
-                // 保持 PAUSED 状态的默认值
-            }
-            default -> {
-                // 其他状态的默认值
-            }
+                break;
+
+            case ROUND_END:
+                this.bossBar.setName(Component.literal("回合结束"));
+                this.bossBar.setColor(BossEvent.BossBarColor.YELLOW);
+                this.bossBar.setProgress(1.0f);
+                break;
+
+            default:
+                this.bossBar.setName(Component.literal("比赛暂停"));
+                this.bossBar.setColor(BossEvent.BossBarColor.PURPLE);
+                this.bossBar.setProgress(1.0f);
+                break;
         }
-        this.bossBar.setProgress(progress);
-        this.bossBar.setName(Component.literal(text));
-        this.bossBar.setColor(color);
     }
+
+    // --- Getters and Setters ---
+    
+    public String getName() { return name; }
+    public MatchState getState() { return state; }
+    public int getMaxPlayers() { return maxPlayers; }
+    public int getPlayerCount() { return playerStats.size(); }
+    public String getCtTeamName() { return ctTeamName; }
+    public String getTTeamName() { return tTeamName; }
+    public Map<UUID, PlayerStats> getPlayerStats() { return playerStats; }
+    public long getCtCount() { return playerStats.values().stream().filter(s -> s.getTeam().equals("CT")).count(); }
+    public long getTCount() { return playerStats.values().stream().filter(s -> s.getTeam().equals("T")).count(); }
+    public MinecraftServer getServer() { return this.server; }
+    public boolean isC4Planted() { return this.c4Planted; }
+    public BlockPos getC4Pos() { return this.c4Pos; }
+    public void setBombsiteA(AABB area) { this.bombsiteA = area; }
+    public void setBombsiteB(AABB area) { this.bombsiteB = area; }
     
     /**
+     * 将一名玩家添加到比赛中。
+     * @param player 要添加的玩家。
+     * @param team   玩家要加入的队伍 ("CT" 或 "T")。
+     */
+    public void addPlayer(ServerPlayer player, String team) { 
+        // 将玩家的UUID和新的统计数据存入Map中。
+        playerStats.put(player.getUUID(), new PlayerStats(team)); 
+        // 为这名新加入的玩家应用计分板，确保他能立即看到。
+        reapplyScoreboardToPlayer(player);
+        this.bossBar.addPlayer(player);
+        setPlayerKnockbackResistance(player, 1000.0);
+    }
+    
+    public void removePlayer(ServerPlayer player) { 
+        playerStats.remove(player.getUUID()); 
+        this.bossBar.removePlayer(player);
+        setPlayerKnockbackResistance(player, 0.0);
+    }
+    
+    public void addCtSpawn(BlockPos pos) { 
+        this.ctSpawns.add(pos); 
+    }
+    
+    public void addTSpawn(BlockPos pos) { 
+        this.tSpawns.add(pos); 
+    }
+    
+    public void setTotalRounds(int rounds) { 
+        this.totalRounds = rounds; 
+    }
+    
+    public void setRoundTimeSeconds(int seconds) { 
+        this.roundTimeSeconds = seconds; 
+    }
+    
+    public void setCtShopPos(BlockPos pos) { 
+        this.ctShopPos = pos; 
+    }
+    
+    public void setTShopPos(BlockPos pos) { 
+        this.tShopPos = pos; 
+    }
+    /**
+     * 获取当前的回合状态。
+     * @return 当前的 RoundState 枚举值 (例如 BUY_PHASE, IN_PROGRESS, ROUND_END)。
+     */
+    public RoundState getRoundState() {
+        return this.roundState;
+    }
+    /**
      * 获取比赛的Boss栏实例。
+     * @return ServerBossEvent 实例
      */
     public ServerBossEvent getBossBar() {
         return this.bossBar;
     }
-
     /**
-     * 为一个指定的玩家设置击退抗性属性。
+     *  ：为一个指定的玩家设置击退抗性属性。
+     * @param player 目标玩家。
+     * @param amount 击退抗性的值（1000.0 为 100% 抗性, 0.0 为默认值）。
      */
     private void setPlayerKnockbackResistance(ServerPlayer player, double amount) {
         if (player != null) {
             String command = "attribute " + player.getName().getString() + " minecraft:generic.knockback_resistance base set " + amount;
+            
             server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
         }
     }
-    
-    /**
-     * 查找并以特定格式广播比赛结束时的统计数据。
-     */
-    private void broadcastEndGameStats() {
-        final String SEPARATOR = "============================";
-        final String COLUMN_SPACER = "           ";
-        final int NAME_PADDING = 12;
-
-        List<Map.Entry<UUID, PlayerStats>> topCtPlayers = getRankedPlayers("CT", 3);
-        List<Map.Entry<UUID, PlayerStats>> topTPlayers = getRankedPlayers("T", 3);
-
-        broadcastToAllPlayersInMatch(Component.literal(""));
-        broadcastToAllPlayersInMatch(Component.literal(SEPARATOR).withStyle(ChatFormatting.GOLD));
-
-        String scoreText = "                本场比分: " + ctScore + ":" + tScore;
-        broadcastToAllPlayersInMatch(Component.literal(scoreText).withStyle(ChatFormatting.WHITE, ChatFormatting.BOLD));
-
-        Component header = Component.literal("CT击杀数排名").withStyle(ChatFormatting.BLUE)
-                .append(Component.literal(COLUMN_SPACER))
-                .append(Component.literal("T击杀数排名").withStyle(ChatFormatting.GOLD));
-        broadcastToAllPlayersInMatch(header);
-
-        int maxRows = Math.max(topCtPlayers.size(), topTPlayers.size());
-        if (maxRows == 0) {
-            broadcastToAllPlayersInMatch(Component.literal("本场比赛没有玩家数据。").withStyle(ChatFormatting.GRAY));
-        }
-
-        for (int i = 0; i < maxRows; i++) {
-            String ctPlayerLine = "";
-            if (i < topCtPlayers.size()) {
-                Map.Entry<UUID, PlayerStats> entry = topCtPlayers.get(i);
-                ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
-                if (player != null) {
-                    ctPlayerLine = String.format("%-" + NAME_PADDING + "." + NAME_PADDING + "s  %d",
-                            player.getName().getString(),
-                            entry.getValue().getKills());
-                }
-            }
-
-            String tPlayerLine = "";
-            if (i < topTPlayers.size()) {
-                Map.Entry<UUID, PlayerStats> entry = topTPlayers.get(i);
-                ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
-                if (player != null) {
-                    tPlayerLine = String.format("%-" + NAME_PADDING + "." + NAME_PADDING + "s  %d",
-                            player.getName().getString(),
-                            entry.getValue().getKills());
-                }
-            }
-
-            String leftPadded = String.format("%-18s", ctPlayerLine);
-            Component fullLine = Component.literal(leftPadded).withStyle(ChatFormatting.WHITE)
-                    .append(Component.literal(tPlayerLine).withStyle(ChatFormatting.WHITE));
-            broadcastToAllPlayersInMatch(fullLine);
-        }
-
-        broadcastToAllPlayersInMatch(Component.literal(SEPARATOR).withStyle(ChatFormatting.GOLD));
-    }
-    
-    /**
-     * 根据击杀数和死亡数获取队伍的排名玩家列表。
-     */
-    private List<Map.Entry<UUID, PlayerStats>> getRankedPlayers(String team, int limit) {
-        return playerStats.entrySet().stream()
-                .filter(entry -> team.equals(entry.getValue().getTeam()))
-                .sorted(Comparator.comparingInt((Map.Entry<UUID, PlayerStats> e) -> e.getValue().getKills()).reversed()
-                        .thenComparingInt(e -> e.getValue().getDeaths()))
-                .limit(limit)
-                .toList();
-    }
-    
-    /**
-     * 比赛结束后，重置所有玩家状态并将其传送至世界出生点。
-     */
-    private void resetAndTeleportPlayers() {
-        BlockPos spawnPos = server.overworld().getSharedSpawnPos();
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player != null) {
-                player.setGameMode(server.getDefaultGameType());
-                setPlayerKnockbackResistance(player, 0.0);
-                player.removeAllEffects();
-                player.getInventory().clearContent();
-                player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 0, 0);
-            }
-        }
-    }
-    
-    /**
-     * 在每回合开始时，向所有玩家广播当前的比分。
-     */
-    private void broadcastScoreUpdate() {
-        String titleJson = String.format("[{\"text\":\"CT \",\"color\":\"blue\"},{\"text\":\"%d - %d\",\"color\":\"white\"},{\"text\":\" T\",\"color\":\"gold\"}]", ctScore, tScore);
-        String chatJson = String.format("[{\"text\":\"%s：\",\"color\":\"yellow\"},{\"text\":\"CT \",\"color\":\"blue\"},{\"text\":\"%d:%d\",\"color\":\"white\",\"bold\":true},{\"text\":\" T\",\"color\":\"gold\"}]", this.name, ctScore, tScore);
-
-        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "title @a title " + titleJson);
-        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "tellraw @a " + chatJson);
-    }
 
     /**
-     * 检查一个玩家是否在任何一个包点内。
-     */
-    public boolean isPlayerInBombsite(ServerPlayer player) {
-        return (bombsiteA != null && bombsiteA.contains(player.position())) || (bombsiteB != null && bombsiteB.contains(player.position()));
-    }
-
-    /**
-     * 检查一个坐标是否在任何一个包点内。
-     */
-    public boolean isPosInBombsite(BlockPos pos) {
-        return (bombsiteA != null && bombsiteA.contains(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5)) || (bombsiteB != null && bombsiteB.contains(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5));
-    }
-    
-    /**
-     * 在比赛区域内寻找掉落的C4实体。
+     *   在比赛区域内寻找掉落的C4实体。
+     * @return 如果找到，则返回ItemEntity对象；否则返回null。
      */
     private ItemEntity findDroppedC4() {
-        if (ctSpawns.isEmpty() && tSpawns.isEmpty() && bombsiteA == null && bombsiteB == null) return null;
+        // 我们需要一个大致的搜索范围，这里我们简单地在所有出生点和包点构成的区域内搜索
+        List<BlockPos> allPositions = new ArrayList<>();
+        allPositions.addAll(ctSpawns);
+        allPositions.addAll(tSpawns);
+        if (bombsiteA != null) allPositions.add(BlockPos.containing(bombsiteA.getCenter()));
+        if (bombsiteB != null) allPositions.add(BlockPos.containing(bombsiteB.getCenter()));
 
-        // [修复] Lambda 表达式中的变量必须是 final 或 effectively final
-        // 创建一个临时的、可变的 AABB 用于构建
-        AABB tempSearchBox = new AABB(ctSpawns.isEmpty() ? (tSpawns.isEmpty() ? BlockPos.ZERO : tSpawns.get(0)) : ctSpawns.get(0));
-        for (BlockPos pos : ctSpawns) {
-            tempSearchBox = tempSearchBox.minmax(new AABB(pos));
-        }
-        for (BlockPos pos : tSpawns) {
-            tempSearchBox = tempSearchBox.minmax(new AABB(pos));
-        }
-        if (bombsiteA != null) {
-            tempSearchBox = tempSearchBox.minmax(bombsiteA);
-        }
-        if (bombsiteB != null) {
-            tempSearchBox = tempSearchBox.minmax(bombsiteB);
-        }
+        if (allPositions.isEmpty()) return null;
 
-        // 将最终构建好的 AABB 赋值给一个 final 变量，以便在 lambda 中使用
-        final AABB searchBox = tempSearchBox.inflate(100.0);
+        // 创建一个包围所有关键点的搜索框，并扩大范围
+        AABB searchBox = new AABB(allPositions.get(0));
+        for (BlockPos pos : allPositions) {
+            searchBox = searchBox.minmax(new AABB(pos));
+        }
+        searchBox = searchBox.inflate(100.0); // 扩大100格
 
-        List<ItemEntity> items = server.overworld().getEntitiesOfClass(ItemEntity.class, searchBox, item -> item.getItem().is(QisCSGO.C4_ITEM.get()));
+        // 在这个区域内搜索C4掉落物
+        List<ItemEntity> items = server.overworld().getEntitiesOfClass(ItemEntity.class, searchBox,
+            item -> item.getItem().is(QisCSGO.C4_ITEM.get()));
+
         return items.isEmpty() ? null : items.get(0);
     }
+
+    /**
+     *    ，处理玩家每一tick的拆弹逻辑。
+     * 由 GameEventsHandler 调用。
+     * @param player 正在被检测的玩家。
+     */
+    public void handlePlayerDefuseTick(ServerPlayer player) {
+        // 检查玩家是否满足拆弹的基本条件
+        boolean canDefuse = isPlayerEligibleToDefuse(player);
+
+        if (canDefuse) {
+            // --- 如果满足条件，则推进拆弹进度 ---
+            int currentProgress = defusingPlayers.getOrDefault(player.getUUID(), 0);
+            currentProgress++;
+            defusingPlayers.put(player.getUUID(), currentProgress);
+
+            // 决定拆弹总时长（是否有拆弹器）
+            boolean hasKit = player.getMainHandItem().is(Items.SHEARS) || player.getOffhandItem().is(Items.SHEARS);
+            int totalDefuseTime = hasKit ? DEFUSE_TIME_WITH_KIT_TICKS : DEFUSE_TIME_TICKS;
+
+            // 如果进度达到100%
+            if (currentProgress >= totalDefuseTime) {
+                defuseC4(player);
+            } else {
+                // 如果还未完成，则显示进度条
+                displayDefuseProgress(player, currentProgress, totalDefuseTime);
+            }
+        } else {
+            // --- 如果不满足条件，则重置该玩家的进度 ---
+            if (defusingPlayers.containsKey(player.getUUID())) {
+                defusingPlayers.remove(player.getUUID());
+                // 发送一条空消息来清除快捷栏上的进度条
+                player.sendSystemMessage(Component.literal(""), true); 
+            }
+        }
+    }
+
+    /**
+     * 辅助方法：检查一个玩家是否满足所有开始拆弹的条件。
+     * @param player 要检查的玩家。
+     * @return 如果满足所有条件则返回 true。
+     */
+    private boolean isPlayerEligibleToDefuse(ServerPlayer player) {
+        // 1. 检查C4是否已安放
+        if (!this.c4Planted) {
+            return false;
+        }
+        
+        // 2. 检查玩家是否为CT
+        PlayerStats stats = playerStats.get(player.getUUID());
+        if (stats == null || !"CT".equals(stats.getTeam())) {
+            return false;
+        }
+
+        // 3. 检查玩家是否在下蹲
+        if (!player.isCrouching()) {
+            return false;
+        }
+
+        // 4. 检查玩家是否正看着C4方块
+        //    使用光线追踪来获取玩家准星指向的方块
+        BlockHitResult hitResult = player.level().clip(new ClipContext(
+            player.getEyePosition(),
+            player.getEyePosition().add(player.getLookAngle().scale(5)), // 检查5格内的距离
+            ClipContext.Block.OUTLINE,
+            ClipContext.Fluid.NONE,
+            player
+        ));
+
+        // 检查光线追踪是否击中了方块，并且击中的位置是否就是C4的位置
+        return hitResult.getType() == HitResult.Type.BLOCK && hitResult.getBlockPos().equals(this.c4Pos);
+
+        // 所有条件都满足
+    }
+
+    /**
+     * 辅助方法：在玩家的快捷栏上方显示拆弹进度条。
+     * @param player 正在拆弹的玩家。
+     * @param currentProgress 当前进度(ticks)。
+     * @param totalProgress 总需进度(ticks)。
+     */
+    private void displayDefuseProgress(ServerPlayer player, int currentProgress, int totalProgress) {
+        int percentage = (int) (((float) currentProgress / totalProgress) * 100);
+        int barsFilled = (int) (((float) currentProgress / totalProgress) * 10); // 进度条总共10格
+        
+        StringBuilder progressBar = new StringBuilder("§a[");
+        for (int i = 0; i < 10; i++) {
+            if (i < barsFilled) {
+                progressBar.append("|");
+            } else {
+                progressBar.append("§7-");
+            }
+        }
+        progressBar.append("§a] §f").append(percentage).append("%");
+
+        Component message = Component.literal("拆除中... ").append(Component.literal(progressBar.toString()));
+        player.sendSystemMessage(message, true); // true 表示显示在 action bar
+    }
+
+    /**
+     * 辅助方法：执行C4的最终拆除逻辑。
+     * @param player 成功拆除C4的玩家。
+     */
+    private void defuseC4(ServerPlayer player) {
+        if (c4Pos != null) {
+            // 移除C4方块。这将自动触发 C4Block.java 中的 onRemove 方法，进而调用 onC4Defused()
+            server.overworld().removeBlock(c4Pos, false);
+            broadcastToAllPlayersInMatch(Component.literal("§b" + player.getName().getString() + " §f已经拆除了炸弹！"));
+        }
+    }
+    /**
+     *获取当前回合所有存活玩家的UUID集合。
+     * @return 一个包含存活玩家UUID的Set。
+     */
+    public Set<UUID> getAlivePlayers() {
+        return this.alivePlayers;
+    }
+
+       
 }
+
