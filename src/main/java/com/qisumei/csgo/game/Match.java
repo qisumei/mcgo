@@ -272,6 +272,27 @@ public class Match {
                 broadcastToTeam(message, "T");
             }
             c4BroadcastCooldown--; // 每tick减1
+
+
+            for (UUID playerUUID : alivePlayers) { // 只遍历存活的玩家
+                ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+                if (player == null) continue;
+
+                PlayerStats stats = playerStats.get(playerUUID);
+                // 确保是T阵营的玩家
+                if (stats != null && "T".equals(stats.getTeam())) {
+                    // 计算玩家与C4掉落物的直线距离
+                    double distance = player.distanceTo(droppedC4);
+                    // 将距离格式化为一位小数的字符串
+                    String distanceString = String.format("%.1f", distance); 
+                    
+                    // 创建要显示的消息
+                    Component distanceMessage = Component.literal("距离C4: " + distanceString + "米").withStyle(ChatFormatting.YELLOW);
+                    
+                    // 通过 Action Bar 发送给玩家 (true代表发送到Action Bar)
+                    player.sendSystemMessage(distanceMessage, true);
+                }
+            }
         } else {
             // 如果没有掉落的C4，确保计时器是重置的
             c4BroadcastCooldown = 0;
