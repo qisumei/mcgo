@@ -3,6 +3,7 @@ package com.qisumei.csgo.c4.block;
 import com.qisumei.csgo.game.Match;
 import com.qisumei.csgo.game.MatchManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -10,68 +11,73 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.minecraft.world.entity.player.Player;
-
-
-import javax.annotation.Nonnull;
 
 /**
- * C4方块类，继承自Block类。
- * [核心修改] 这个方块现在是坚不可摧的(-1.0f)，其拆除逻辑完全由外部的Match和GameEventsHandler处理。
+ * C4炸弹方块类，代表已被安放在游戏世界中的C4。
+ * <p>
+ * 这个方块有两个核心特性：
+ * 1. 它是坚不可摧的。玩家无法通过常规方式（如挖掘）来破坏它。
+ * 2. 它的移除逻辑与拆弹成功事件绑定。当这个方块被代码移除时（在 {@link Match#defuseC4} 中），
+ * 会触发 {@link #onRemove} 方法，从而调用 {@link Match#onC4Defused} 来宣布CT胜利。
+ * </p>
+ *
+ * @author Qisumei
  */
 public class C4Block extends Block {
+    /**
+     * C4方块的自定义碰撞箱形状，使其看起来更扁平。
+     */
     private static final VoxelShape C4_SHAPE = Block.box(0, 0, 0, 15, 5, 12);
 
-    /**
-     * 构造函数，创建一个新的C4方块实例。
-     * @param props 方块属性对象，定义方块的基本属性如材质、硬度等。
-     */
     public C4Block(BlockBehaviour.Properties props) {
         super(props);
     }
 
     /**
-     * 获取方块的碰撞形状。
-     * @return 返回C4方块的体素形状。
+     * 获取方块的视觉和物理形状。
+     *
+     * @return 返回C4方块的自定义体素形状。
      */
     @Override
-    @Nonnull
-    public VoxelShape getShape(@Nonnull BlockState state, @Nonnull BlockGetter world, @Nonnull BlockPos pos, @Nonnull CollisionContext context) {
+    public VoxelShape getShape(BlockState state, BlockGetter world, BlockPos pos, CollisionContext context) {
         return C4_SHAPE;
     }
 
     /**
-     * 当方块被移除时的回调方法。
-     * 这是拆弹成功的最终触发点。当Match类确认拆弹进度达到100%后，会移除这个方块，从而调用此方法。
-     * @param state 被移除前的方块状态。
-     * @param world 方块所在的世界对象。
-     * @param pos 方块的位置坐标。
-     * @param newState 移除后的新方块状态。
-     * @param moved 是否是由于移动导致的移除。
+     * 当此方块从世界中被移除时调用的回调方法。
+     * <p>
+     * 这是触发拆弹成功的关键。当CT玩家成功完成拆弹动作后，游戏逻辑会调用
+     * {@code level.removeBlock()} 来移除这个C4方块，从而进入此方法，
+     * 最终调用 {@link Match#onC4Defused()} 来结束回合。
+     * </p>
+     *
+     * @param state     被移除前的方块状态。
+     * @param world     方块所在的世界。
+     * @param pos       方块的位置。
+     * @param newState  将要替换当前方块的新状态（通常是空气）。
+     * @param isMoving  方块是否因被活塞等移动而移除。
      */
     @Override
-    public void onRemove(@Nonnull BlockState state, @Nonnull Level world, @Nonnull BlockPos pos, @Nonnull BlockState newState, boolean moved) {
-        // 确保这个方法只在方块真的被替换成其他东西（比如空气）时才触发
-        if (!state.is(newState.getBlock())) {
-            // 在服务端执行
-            if (!world.isClientSide()) {
-                // 根据C4的位置找到对应的比赛
-                Match match = MatchManager.getMatchFromC4Pos(pos);
-                if (match != null) {
-                    // 调用比赛的C4拆除成功逻辑
-                    match.onC4Defused();
-                }
+    public void onRemove(BlockState state, Level world, BlockPos pos, BlockState newState, boolean isMoving) {
+        // 确保这个方法只在方块真的被替换成其他东西时才触发
+        if (!state.is(newState.getBlock()) && !world.isClientSide()) {
+            // 根据C4的位置找到对应的比赛
+            Match match = MatchManager.getMatchFromC4Pos(pos);
+            if (match != null) {
+                // 调用比赛的C4拆除成功逻辑
+                match.onC4Defused();
             }
-            super.onRemove(state, world, pos, newState, moved);
         }
+        super.onRemove(state, world, pos, newState, isMoving);
     }
 
     /**
-     * [核心修改] 重写此方法并返回0.0f，以防止玩家通过常规方式破坏方块。
-     * 拆除逻辑现在完全由 Match.java 和 GameEventsHandler.java 控制。
+     * 获取玩家破坏此方块的进度。
+     *
+     * @return 总是返回 0.0f，使玩家无法通过长按左键来破坏此方块。
      */
     @Override
-    public float getDestroyProgress(@Nonnull BlockState state, @Nonnull Player player, @Nonnull BlockGetter world, @Nonnull BlockPos pos) {
+    public float getDestroyProgress(BlockState state, Player player, BlockGetter world, BlockPos pos) {
         return 0.0f;
     }
 }

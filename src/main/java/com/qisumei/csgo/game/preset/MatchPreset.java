@@ -3,178 +3,147 @@ package com.qisumei.csgo.game.preset;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
- * MatchPreset 类用于存储一场CSGO比赛的预设配置信息。
- * 包括反恐精英（CT）和恐怖分子（T）的出生点、商店位置、炸弹安放区范围、总回合数和每回合时间等。
+ * 一个不可变的记录（Record），用于存储一场CSGO比赛的完整预设配置。
+ * <p>
+ * 使用 Record 可以简化数据类的编写，并确保其在创建后不可被修改，提高了代码的健壮性。
+ * </p>
+ *
+ * @param ctSpawns         CT队伍的出生点列表。
+ * @param tSpawns          T队伍的出生点列表。
+ * @param ctShopPos        CT队伍的商店位置。
+ * @param tShopPos         T队伍的商店位置。
+ * @param bombsiteA        A炸弹区的边界框。
+ * @param bombsiteB        B炸弹区的边界框。
+ * @param totalRounds      比赛总回合数。
+ * @param roundTimeSeconds 每回合的时间（秒）。
+ * @author Qisumei
  */
-public class MatchPreset {
-
-    /** 反恐精英（CT）的出生点列表 */
-    public final List<BlockPos> ctSpawns;
-
-    /** 恐怖分子（T）的出生点列表 */
-    public final List<BlockPos> tSpawns;
-
-    /** 反恐精英（CT）的商店位置 */
-    public final BlockPos ctShopPos;
-
-    /** 恐怖分子（T）的商店位置 */
-    public final BlockPos tShopPos;
-
-    /** A炸弹区的边界框 */
-    public final AABB bombsiteA;
-
-    /** B炸弹区的边界框 */
-    public final AABB bombsiteB;
-
-    /** 总回合数 */
-    public final int totalRounds;
-
-    /** 每个回合的时间（秒） */
-    public final int roundTimeSeconds;
+public record MatchPreset(
+        List<BlockPos> ctSpawns,
+        List<BlockPos> tSpawns,
+        BlockPos ctShopPos,
+        BlockPos tShopPos,
+        AABB bombsiteA,
+        AABB bombsiteB,
+        int totalRounds,
+        int roundTimeSeconds
+) {
 
     /**
-     * 构造一个 MatchPreset 实例。
+     * 将当前 MatchPreset 对象序列化为 NBT 标签，以便保存到文件中。
      *
-     * @param ctSpawns         反恐精英（CT）的出生点列表
-     * @param tSpawns          恐怖分子（T）的出生点列表
-     * @param ctShopPos        反恐精英（CT）的商店位置
-     * @param tShopPos         恐怖分子（T）的商店位置
-     * @param bombsiteA        A炸弹区的边界框
-     * @param bombsiteB        B炸弹区的边界框
-     * @param totalRounds      总回合数
-     * @param roundTimeSeconds 每个回合的时间（秒）
-     */
-    public MatchPreset(List<BlockPos> ctSpawns, List<BlockPos> tSpawns, BlockPos ctShopPos, BlockPos tShopPos, AABB bombsiteA, AABB bombsiteB, int totalRounds, int roundTimeSeconds) {
-        this.ctSpawns = ctSpawns;
-        this.tSpawns = tSpawns;
-        this.ctShopPos = ctShopPos;
-        this.tShopPos = tShopPos;
-        this.bombsiteA = bombsiteA;
-        this.bombsiteB = bombsiteB;
-        this.totalRounds = totalRounds;
-        this.roundTimeSeconds = roundTimeSeconds;
-    }
-
-    /**
-     * 将当前 MatchPreset 对象序列化为 NBT 标签。
-     *
-     * @return 序列化后的 CompoundTag 对象
+     * @return 包含此预设所有数据的 {@link CompoundTag}。
      */
     public CompoundTag toNbt() {
         CompoundTag tag = new CompoundTag();
 
-        // --- 使用手动方式写入 BlockPos 列表 ---
-        ListTag ctSpawnsTag = new ListTag();
-        for (BlockPos pos : ctSpawns) {
-            CompoundTag posTag = new CompoundTag();
-            posTag.putInt("x", pos.getX());
-            posTag.putInt("y", pos.getY());
-            posTag.putInt("z", pos.getZ());
-            ctSpawnsTag.add(posTag);
-        }
-        tag.put("ctSpawns", ctSpawnsTag);
+        // 序列化BlockPos列表
+        tag.put("ctSpawns", serializeBlockPosList(this.ctSpawns));
+        tag.put("tSpawns", serializeBlockPosList(this.tSpawns));
 
-        ListTag tSpawnsTag = new ListTag();
-        for (BlockPos pos : tSpawns) {
-            CompoundTag posTag = new CompoundTag();
-            posTag.putInt("x", pos.getX());
-            posTag.putInt("y", pos.getY());
-            posTag.putInt("z", pos.getZ());
-            tSpawnsTag.add(posTag);
-        }
-        tag.put("tSpawns", tSpawnsTag);
+        // 序列化单个BlockPos（如果存在）
+        Optional.ofNullable(this.ctShopPos).ifPresent(pos -> tag.put("ctShopPos", NbtUtils.writeBlockPos(pos)));
+        Optional.ofNullable(this.tShopPos).ifPresent(pos -> tag.put("tShopPos", NbtUtils.writeBlockPos(pos)));
 
-        // --- 使用手动方式写入单个 BlockPos ---
-        if (ctShopPos != null) {
-            CompoundTag posTag = new CompoundTag();
-            posTag.putInt("x", ctShopPos.getX());
-            posTag.putInt("y", ctShopPos.getY());
-            posTag.putInt("z", ctShopPos.getZ());
-            tag.put("ctShopPos", posTag);
-        }
-        if (tShopPos != null) {
-            CompoundTag posTag = new CompoundTag();
-            posTag.putInt("x", tShopPos.getX());
-            posTag.putInt("y", tShopPos.getY());
-            posTag.putInt("z", tShopPos.getZ());
-            tag.put("tShopPos", posTag);
-        }
+        // 序列化AABB（如果存在）
+        Optional.ofNullable(this.bombsiteA).ifPresent(aabb -> tag.put("bombsiteA", serializeAABB(aabb)));
+        Optional.ofNullable(this.bombsiteB).ifPresent(aabb -> tag.put("bombsiteB", serializeAABB(aabb)));
 
-        // AABB 和其他数据保持不变
-        if (bombsiteA != null) {
-            tag.putDouble("bombsiteA_minX", bombsiteA.minX);
-            tag.putDouble("bombsiteA_minY", bombsiteA.minY);
-            tag.putDouble("bombsiteA_minZ", bombsiteA.minZ);
-            tag.putDouble("bombsiteA_maxX", bombsiteA.maxX);
-            tag.putDouble("bombsiteA_maxY", bombsiteA.maxY);
-            tag.putDouble("bombsiteA_maxZ", bombsiteA.maxZ);
-        }
-        if (bombsiteB != null) {
-            tag.putDouble("bombsiteB_minX", bombsiteB.minX);
-            tag.putDouble("bombsiteB_minY", bombsiteB.minY);
-            tag.putDouble("bombsiteB_minZ", bombsiteB.minZ);
-            tag.putDouble("bombsiteB_maxX", bombsiteB.maxX);
-            tag.putDouble("bombsiteB_maxY", bombsiteB.maxY);
-            tag.putDouble("bombsiteB_maxZ", bombsiteB.maxZ);
-        }
+        // 序列化基本数据类型
+        tag.putInt("totalRounds", this.totalRounds);
+        tag.putInt("roundTimeSeconds", this.roundTimeSeconds);
 
-        tag.putInt("totalRounds", totalRounds);
-        tag.putInt("roundTimeSeconds", roundTimeSeconds);
         return tag;
     }
 
     /**
      * 从 NBT 标签反序列化为 MatchPreset 对象。
      *
-     * @param tag 包含 MatchPreset 数据的 CompoundTag
-     * @return 反序列化后的 MatchPreset 实例
+     * @param tag 包含 MatchPreset 数据的 {@link CompoundTag}。
+     * @return 一个新的 {@link MatchPreset} 实例。
      */
     public static MatchPreset fromNbt(CompoundTag tag) {
-        List<BlockPos> ctSpawns = new ArrayList<>();
-        // --- 使用手动方式读取 BlockPos 列表 ---
-        tag.getList("ctSpawns", CompoundTag.TAG_COMPOUND).forEach(t -> {
-            CompoundTag posTag = (CompoundTag) t;
-            ctSpawns.add(new BlockPos(posTag.getInt("x"), posTag.getInt("y"), posTag.getInt("z")));
-        });
+        // 反序列化BlockPos列表
+        List<BlockPos> ctSpawns = deserializeBlockPosList(tag.getList("ctSpawns", CompoundTag.TAG_COMPOUND));
+        List<BlockPos> tSpawns = deserializeBlockPosList(tag.getList("tSpawns", CompoundTag.TAG_COMPOUND));
 
-        List<BlockPos> tSpawns = new ArrayList<>();
-        tag.getList("tSpawns", CompoundTag.TAG_COMPOUND).forEach(t -> {
-            CompoundTag posTag = (CompoundTag) t;
-            tSpawns.add(new BlockPos(posTag.getInt("x"), posTag.getInt("y"), posTag.getInt("z")));
-        });
+        // 反序列化单个BlockPos（如果存在）
+        // **[修复]** 使用新的 `readBlockPos(tag, key)` 方法，它返回一个 Optional。
+        BlockPos ctShop = NbtUtils.readBlockPos(tag, "ctShopPos").orElse(null);
+        BlockPos tShop = NbtUtils.readBlockPos(tag, "tShopPos").orElse(null);
 
-        // --- 使用手动方式读取单个 BlockPos ---
-        BlockPos ctShop = null;
-        if (tag.contains("ctShopPos")) {
-            CompoundTag posTag = tag.getCompound("ctShopPos");
-            ctShop = new BlockPos(posTag.getInt("x"), posTag.getInt("y"), posTag.getInt("z"));
-        }
-        BlockPos tShop = null;
-        if (tag.contains("tShopPos")) {
-            CompoundTag posTag = tag.getCompound("tShopPos");
-            tShop = new BlockPos(posTag.getInt("x"), posTag.getInt("y"), posTag.getInt("z"));
-        }
+        // 反序列化AABB（如果存在）
+        AABB aabbA = tag.contains("bombsiteA") ? deserializeAABB(tag.getCompound("bombsiteA")) : null;
+        AABB aabbB = tag.contains("bombsiteB") ? deserializeAABB(tag.getCompound("bombsiteB")) : null;
 
-        AABB aabbA = null;
-        if (tag.contains("bombsiteA_minX")) {
-            aabbA = new AABB(tag.getDouble("bombsiteA_minX"), tag.getDouble("bombsiteA_minY"), tag.getDouble("bombsiteA_minZ"),
-                             tag.getDouble("bombsiteA_maxX"), tag.getDouble("bombsiteA_maxY"), tag.getDouble("bombsiteA_maxZ"));
-        }
-        AABB aabbB = null;
-        if (tag.contains("bombsiteB_minX")) {
-             aabbB = new AABB(tag.getDouble("bombsiteB_minX"), tag.getDouble("bombsiteB_minY"), tag.getDouble("bombsiteB_minZ"),
-                              tag.getDouble("bombsiteB_maxX"), tag.getDouble("bombsiteB_maxY"), tag.getDouble("bombsiteB_maxZ"));
-        }
-
+        // 反序列化基本数据类型
         int rounds = tag.getInt("totalRounds");
         int time = tag.getInt("roundTimeSeconds");
 
         return new MatchPreset(ctSpawns, tSpawns, ctShop, tShop, aabbA, aabbB, rounds, time);
     }
+
+    // --- 私有辅助方法 ---
+
+    /**
+     * 将 BlockPos 列表序列化为 ListTag。
+     */
+    private static ListTag serializeBlockPosList(List<BlockPos> list) {
+        ListTag listTag = new ListTag();
+        list.forEach(pos -> listTag.add(NbtUtils.writeBlockPos(pos)));
+        return listTag;
+    }
+
+    /**
+     * 将 ListTag 反序列化为 BlockPos 列表。
+     */
+    private static List<BlockPos> deserializeBlockPosList(ListTag listTag) {
+        List<BlockPos> list = new ArrayList<>();
+        for (int i = 0; i < listTag.size(); i++) {
+            // **[修复]** 使用 NbtUtils.readBlockPos(CompoundTag) 的内联实现来绕过解析问题。
+            list.add(deserializeBlockPos(listTag.getCompound(i)));
+        }
+        return list;
+    }
+    
+    /**
+     * 将 CompoundTag 反序列化为 BlockPos。
+     * 这是对 `NbtUtils.readBlockPos(CompoundTag)` 的一个手动实现，以解决潜在的映射或版本兼容性问题。
+     */
+    private static BlockPos deserializeBlockPos(CompoundTag tag) {
+        return new BlockPos(tag.getInt("X"), tag.getInt("Y"), tag.getInt("Z"));
+    }
+
+    /**
+     * 将 AABB 序列化为 CompoundTag。
+     */
+    private static CompoundTag serializeAABB(AABB aabb) {
+        CompoundTag tag = new CompoundTag();
+        tag.putDouble("minX", aabb.minX);
+        tag.putDouble("minY", aabb.minY);
+        tag.putDouble("minZ", aabb.minZ);
+        tag.putDouble("maxX", aabb.maxX);
+        tag.putDouble("maxY", aabb.maxY);
+        tag.putDouble("maxZ", aabb.maxZ);
+        return tag;
+    }
+
+    /**
+     * 将 CompoundTag 反序列化为 AABB。
+     */
+    private static AABB deserializeAABB(CompoundTag tag) {
+        return new AABB(
+                tag.getDouble("minX"), tag.getDouble("minY"), tag.getDouble("minZ"),
+                tag.getDouble("maxX"), tag.getDouble("maxY"), tag.getDouble("maxZ")
+        );
+    }
 }
+
