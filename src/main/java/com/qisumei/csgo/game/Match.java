@@ -26,10 +26,7 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.scores.DisplaySlot;
-import net.minecraft.world.scores.Objective;
-import net.minecraft.world.scores.PlayerScoreEntry;
-import net.minecraft.world.scores.Scoreboard;
+import net.minecraft.world.scores.*;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 
 import java.util.*;
@@ -221,8 +218,13 @@ public class Match {
                             startNewRound(); // 回合结束展示时间到，开始新回合
                         }
                     }
-                    // **[修复]** 添加 default case 来处理 PAUSED 状态，避免警告
-                    case PAUSED, default -> {}
+                    // [修复] 统一使用箭头表达式
+                    case PAUSED -> {
+                        // 在PAUSED状态下，不执行任何操作
+                    }
+                    default -> {
+                        // 在其他未定义状态下，不执行任何操作
+                    }
                 }
             }
         }
@@ -537,7 +539,7 @@ public class Match {
     // =================================================================================
 
     /**
-     * 当C4被安放时由 {@link C4Item} 调用。
+     * 当C4被安放时由 {@link com.qisumei.csgo.c4.item.C4Item} 调用。
      *
      * @param pos C4被安放的位置坐标。
      */
@@ -560,7 +562,7 @@ public class Match {
     }
 
     /**
-     * 当C4被成功拆除时由 {@link C4Block} 调用。
+     * 当C4被成功拆除时由 {@link com.qisumei.csgo.c4.block.C4Block} 调用。
      */
     public void onC4Defused() {
         if (this.roundState == RoundState.IN_PROGRESS) {
@@ -578,7 +580,9 @@ public class Match {
             // 造成自定义的范围伤害
             applyCustomExplosionDamage();
 
-            // **[修复]** playSound方法的调用需要获取SoundEvent的.value()
+            // [修复] SoundEvents API 变更
+            // playSound 需要一个实际的 SoundEvent 对象，而不是 Holder。
+            // 我们需要通过调用 .value() 来获取它。
             server.overworld().playSound(null, c4Pos, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.BLOCKS, 4.0F, (1.0F + (server.overworld().random.nextFloat() - server.overworld().random.nextFloat()) * 0.2F) * 0.7F);
             server.overworld().sendParticles(ParticleTypes.EXPLOSION_EMITTER, c4Pos.getX() + 0.5, c4Pos.getY() + 0.5, c4Pos.getZ() + 0.5, 2, 1.0, 1.0, 1.0, 0.0);
         }
@@ -990,14 +994,24 @@ public class Match {
 
         if (allKeyPositions.isEmpty()) return;
 
-        AABB matchArea = new AABB(allKeyPositions.get(0));
-        for(BlockPos pos : allKeyPositions) {
-            matchArea = matchArea.minmax(new AABB(pos));
+        // [修复] Lambda 表达式中的变量必须是 final 或 effectively final
+        // 创建一个临时的、可变的 AABB 用于构建
+        AABB tempSearchBox = new AABB(allKeyPositions.get(0));
+        for (BlockPos pos : allKeyPositions) {
+            tempSearchBox = tempSearchBox.minmax(new AABB(pos));
         }
-        matchArea = matchArea.inflate(100.0); // 扩大范围以覆盖整个地图
+        if (bombsiteA != null) {
+            tempSearchBox = tempSearchBox.minmax(bombsiteA);
+        }
+        if (bombsiteB != null) {
+            tempSearchBox = tempSearchBox.minmax(bombsiteB);
+        }
+        
+        // 将最终构建好的 AABB 赋值给一个 final 变量，以便在 lambda 中使用
+        final AABB searchBox = tempSearchBox.inflate(100.0);
 
         // 获取并移除区域内的所有ItemEntity
-        List<ItemEntity> itemsToRemove = server.overworld().getEntitiesOfClass(ItemEntity.class, matchArea, (e) -> true);
+        List<ItemEntity> itemsToRemove = server.overworld().getEntitiesOfClass(ItemEntity.class, searchBox, (e) -> true);
         itemsToRemove.forEach(ItemEntity::discard);
         QisCSGO.LOGGER.info("比赛 '{}': 清理了 {} 个掉落物品。", this.name, itemsToRemove.size());
     }
@@ -1166,39 +1180,44 @@ public class Match {
         // 仅更新在榜玩家的分数
         playerStats.forEach((uuid, stats) -> {
             ServerPlayer player = server.getPlayerList().getPlayer(uuid);
-            // **[修复]** API变更: 使用 playerHasObjective 进行检查
-            if(player != null && scoreboard.playerHasObjective(player.getScoreboardName(), objective)) {
-                scoreboard.getOrCreatePlayerScore(player, this.objective).set(stats.getKills());
+            if (player != null) {
+                // 新 API: 直接获取或创建分数并设置
+                // 第三个参数 true 表示如果分数不存在则创建
+                this.scoreboard.getOrCreatePlayerScore(player, this.objective, true).set(stats.getKills());
             }
         });
     }
 
     /**
-     * 完整重建计分板，清除所有旧条目并添加当前所有玩家。
-     */
-    private void rebuildScoreboard() {
-        if (this.objective == null || this.scoreboard == null) return;
+ * 完整重建计分板，清除所有旧条目并添加当前所有玩家。
+ * 这是为了处理玩家离线后计分板条目残留的问题。
+ */
+private void rebuildScoreboard() {
+    if (this.objective == null || this.scoreboard == null) return;
 
-        // 获取所有玩家并按击杀数排序
-        List<Map.Entry<UUID, PlayerStats>> sortedPlayers = playerStats.entrySet().stream()
-                .sorted(Comparator.comparingInt((Map.Entry<UUID, PlayerStats> e) -> e.getValue().getKills()).reversed())
-                .toList();
+    // [修复] Scoreboard API 变更 - 1.21.1 版本
+    // 获取所有当前计分项的分数条目
+    Collection<PlayerScoreEntry> scores = scoreboard.listPlayerScores(this.objective);
 
-        // **[修复]** API变更: 使用 getPlayerScores 和 resetPlayerScore(PlayerScoreEntry)
-        // 移除所有旧的计分项
-        Set<PlayerScoreEntry> scores = scoreboard.getPlayerScores(this.objective);
-        // 创建一个副本进行迭代，以避免ConcurrentModificationException
-        new ArrayList<>(scores).forEach(scoreboard::resetPlayerScore);
+    // [修复] 遍历副本并移除每个分数条目
+    // 在 1.21.1 中，PlayerScoreEntry.owner() 返回 String，但我们需要 ScoreHolder
+    // 使用 ScoreHolder.forNameOnly() 来创建 ScoreHolder
+    new ArrayList<>(scores).forEach(score -> {
+        // 使用 ScoreHolder.forNameOnly 将字符串转换为 ScoreHolder
+        ScoreHolder scoreHolder = ScoreHolder.forNameOnly(score.owner());
+        scoreboard.resetSinglePlayerScore(scoreHolder, this.objective);
+    });
 
-        // 添加当前所有玩家的计分项
-        for (Map.Entry<UUID, PlayerStats> entry : sortedPlayers) {
-            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
-            if (player != null) {
-                this.scoreboard.getOrCreatePlayerScore(player, this.objective).set(entry.getValue().getKills());
-            }
+    // 重新添加当前所有玩家的分数
+    playerStats.forEach((uuid, stats) -> {
+        ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+        if (player != null) {
+            this.scoreboard.getOrCreatePlayerScore(player, this.objective, true).set(stats.getKills());
         }
-    }
+    });
 
+    QisCSGO.LOGGER.debug("重建计分板: {}", this.objective.getName());
+}
 
     /**
      * 在比赛结束时移除计分板。
@@ -1250,9 +1269,12 @@ public class Match {
                 text = "回合结束";
                 color = BossEvent.BossBarColor.YELLOW;
             }
-            // **[修复]** 添加 default case 来处理 PAUSED 状态，避免警告
-            case PAUSED, default -> {
-                //保持默认值
+            // [修复] 统一使用箭头表达式
+            case PAUSED -> {
+                // 保持 PAUSED 状态的默认值
+            }
+            default -> {
+                // 其他状态的默认值
             }
         }
         this.bossBar.setProgress(progress);
@@ -1394,17 +1416,28 @@ public class Match {
      * 在比赛区域内寻找掉落的C4实体。
      */
     private ItemEntity findDroppedC4() {
-        if (ctSpawns.isEmpty() && tSpawns.isEmpty()) return null; // 如果没有定义任何区域，则不搜索
-        
-        AABB searchBox = new AABB(ctSpawns.isEmpty() ? tSpawns.get(0) : ctSpawns.get(0));
-        ctSpawns.forEach(pos -> searchBox.minmax(new AABB(pos)));
-        tSpawns.forEach(pos -> searchBox.minmax(new AABB(pos)));
-        if(bombsiteA != null) searchBox.minmax(bombsiteA);
-        if(bombsiteB != null) searchBox.minmax(bombsiteB);
-        searchBox = searchBox.inflate(100.0);
+        if (ctSpawns.isEmpty() && tSpawns.isEmpty() && bombsiteA == null && bombsiteB == null) return null;
+
+        // [修复] Lambda 表达式中的变量必须是 final 或 effectively final
+        // 创建一个临时的、可变的 AABB 用于构建
+        AABB tempSearchBox = new AABB(ctSpawns.isEmpty() ? (tSpawns.isEmpty() ? BlockPos.ZERO : tSpawns.get(0)) : ctSpawns.get(0));
+        for (BlockPos pos : ctSpawns) {
+            tempSearchBox = tempSearchBox.minmax(new AABB(pos));
+        }
+        for (BlockPos pos : tSpawns) {
+            tempSearchBox = tempSearchBox.minmax(new AABB(pos));
+        }
+        if (bombsiteA != null) {
+            tempSearchBox = tempSearchBox.minmax(bombsiteA);
+        }
+        if (bombsiteB != null) {
+            tempSearchBox = tempSearchBox.minmax(bombsiteB);
+        }
+
+        // 将最终构建好的 AABB 赋值给一个 final 变量，以便在 lambda 中使用
+        final AABB searchBox = tempSearchBox.inflate(100.0);
 
         List<ItemEntity> items = server.overworld().getEntitiesOfClass(ItemEntity.class, searchBox, item -> item.getItem().is(QisCSGO.C4_ITEM.get()));
         return items.isEmpty() ? null : items.get(0);
     }
 }
-

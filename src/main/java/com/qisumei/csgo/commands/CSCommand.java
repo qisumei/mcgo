@@ -25,7 +25,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.AABB;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
@@ -54,94 +53,92 @@ public final class CSCommand {
      */
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("cs")
-                // --- 比赛生命周期管理指令 (管理员权限) ---
-                .then(Commands.literal("start")
-                        .requires(source -> source.hasPermission(2))
-                        .then(Commands.argument("name", StringArgumentType.string())
-                                .executes(ctx -> executeStartMatch(ctx, null))
-                                .then(Commands.literal("from")
-                                        .then(Commands.argument("preset_name", StringArgumentType.string())
-                                                .executes(ctx -> executeStartMatch(ctx, StringArgumentType.getString(ctx, "preset_name")))
-                                                .then(Commands.argument("players", IntegerArgumentType.integer(2))
-                                                        .executes(ctx -> executeStartMatch(ctx, StringArgumentType.getString(ctx, "preset_name"))))))
-                                .then(Commands.argument("players", IntegerArgumentType.integer(2))
-                                        .executes(ctx -> executeStartMatch(ctx, null)))))
-                .then(Commands.literal("began")
-                        .requires(source -> source.hasPermission(2))
-                        .then(Commands.argument("name", StringArgumentType.string())
-                                .executes(ctx -> executeBeganMatch(ctx, false))
-                                .then(Commands.literal("yes").executes(ctx -> executeBeganMatch(ctx, true)))))
-                .then(Commands.literal("end")
-                        .requires(source -> source.hasPermission(2))
-                        .then(Commands.argument("name", StringArgumentType.string())
-                                .executes(CSCommand::executeEndMatch)))
+            // --- 比赛生命周期管理指令 (管理员权限) ---
+            .then(Commands.literal("start")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.argument("name", StringArgumentType.string())
+                    // -> /cs start <name>
+                    .executes(ctx -> executeStartMatch(ctx, 10, null))
+                    // -> /cs start <name> from <preset>
+                    .then(Commands.literal("from")
+                        .then(Commands.argument("preset_name", StringArgumentType.string())
+                            // -> /cs start <name> from <preset>
+                            .executes(ctx -> executeStartMatch(ctx, 10, StringArgumentType.getString(ctx, "preset_name")))
+                            // -> /cs start <name> from <preset> players <count>
+                            .then(Commands.argument("players", IntegerArgumentType.integer(2))
+                                .executes(ctx -> executeStartMatch(ctx, IntegerArgumentType.getInteger(ctx, "players"), StringArgumentType.getString(ctx, "preset_name"))))))
+                    // -> /cs start <name> players <count>
+                    .then(Commands.argument("players", IntegerArgumentType.integer(2))
+                        .executes(ctx -> executeStartMatch(ctx, IntegerArgumentType.getInteger(ctx, "players"), null)))))
+            .then(Commands.literal("began")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.argument("name", StringArgumentType.string())
+                    .executes(ctx -> executeBeganMatch(ctx, false))
+                    .then(Commands.literal("yes").executes(ctx -> executeBeganMatch(ctx, true)))))
+            .then(Commands.literal("end")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.argument("name", StringArgumentType.string())
+                    .executes(CSCommand::executeEndMatch)))
 
-                // --- 比赛与地图设置指令 (管理员权限) ---
-                .then(Commands.literal("match")
-                        .requires(source -> source.hasPermission(2))
-                        .then(Commands.argument("name", StringArgumentType.string())
-                                .then(Commands.literal("set")
-                                        .then(Commands.literal("spawnpoint")
-                                                .then(Commands.literal("CT").then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(ctx -> executeSetSpawnpoint(ctx, "CT"))))
-                                                .then(Commands.literal("T").then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(ctx -> executeSetSpawnpoint(ctx, "T")))))
-                                        .then(Commands.literal("bombsite")
-                                                .then(Commands.literal("A").then(Commands.argument("from", BlockPosArgument.blockPos()).then(Commands.argument("to", BlockPosArgument.blockPos()).executes(ctx -> executeSetBombsite(ctx, "A")))))
-                                                .then(Commands.literal("B").then(Commands.argument("from", BlockPosArgument.blockPos()).then(Commands.argument("to", BlockPosArgument.blockPos()).executes(ctx -> executeSetBombsite(ctx, "B"))))))
-                                        .then(Commands.literal("num").then(Commands.argument("rounds", IntegerArgumentType.integer(2)).executes(CSCommand::executeSetNumRounds)))
-                                        .then(Commands.literal("time").then(Commands.argument("seconds", IntegerArgumentType.integer(10)).executes(CSCommand::executeSetRoundTime)))
-                                        .then(Commands.literal("shop")
-                                                .then(Commands.literal("CT").then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(ctx -> executeSetShopPos(ctx, "CT"))))
-                                                .then(Commands.literal("T").then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(ctx -> executeSetShopPos(ctx, "T"))))))
-                                .then(Commands.literal("save")
-                                        .then(Commands.argument("preset_name", StringArgumentType.string())
-                                                .executes(CSCommand::executeSaveMatchPreset)))))
-                .then(Commands.literal("presets")
-                        .requires(source -> source.hasPermission(2))
-                        .executes(CSCommand::executeListPresets))
-                .then(Commands.literal("config")
-                        .requires(source -> source.hasPermission(2))
-                        .then(Commands.literal("set")
-                                .then(Commands.literal("initialgear")
-                                        .then(Commands.literal("CT").executes(ctx -> executeSetInitialGear(ctx, "CT")))
-                                        .then(Commands.literal("T").executes(ctx -> executeSetInitialGear(ctx, "T"))))))
+            // --- 比赛与地图设置指令 (管理员权限) ---
+            .then(Commands.literal("match")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.argument("name", StringArgumentType.string())
+                    .then(Commands.literal("set")
+                        .then(Commands.literal("spawnpoint")
+                            .then(Commands.literal("CT").then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(ctx -> executeSetSpawnpoint(ctx, "CT"))))
+                            .then(Commands.literal("T").then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(ctx -> executeSetSpawnpoint(ctx, "T")))))
+                        .then(Commands.literal("bombsite")
+                            .then(Commands.literal("A").then(Commands.argument("from", BlockPosArgument.blockPos()).then(Commands.argument("to", BlockPosArgument.blockPos()).executes(ctx -> executeSetBombsite(ctx, "A")))))
+                            .then(Commands.literal("B").then(Commands.argument("from", BlockPosArgument.blockPos()).then(Commands.argument("to", BlockPosArgument.blockPos()).executes(ctx -> executeSetBombsite(ctx, "B"))))))
+                        .then(Commands.literal("num").then(Commands.argument("rounds", IntegerArgumentType.integer(2)).executes(CSCommand::executeSetNumRounds)))
+                        .then(Commands.literal("time").then(Commands.argument("seconds", IntegerArgumentType.integer(10)).executes(CSCommand::executeSetRoundTime)))
+                        .then(Commands.literal("shop")
+                            .then(Commands.literal("CT").then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(ctx -> executeSetShopPos(ctx, "CT"))))
+                            .then(Commands.literal("T").then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(ctx -> executeSetShopPos(ctx, "T"))))))
+                    .then(Commands.literal("save")
+                        .then(Commands.argument("preset_name", StringArgumentType.string())
+                            .executes(CSCommand::executeSaveMatchPreset)))))
+            .then(Commands.literal("presets")
+                .requires(source -> source.hasPermission(2))
+                .executes(CSCommand::executeListPresets))
+            .then(Commands.literal("config")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.literal("set")
+                    .then(Commands.literal("initialgear")
+                        .then(Commands.literal("CT").executes(ctx -> executeSetInitialGear(ctx, "CT")))
+                        .then(Commands.literal("T").executes(ctx -> executeSetInitialGear(ctx, "T"))))))
 
-                // --- 通用与玩家指令 ---
-                .then(Commands.literal("list").executes(CSCommand::executeListMatches))
-                .then(Commands.literal("join")
-                        .then(Commands.argument("name", StringArgumentType.string())
-                                .executes(CSCommand::executeJoinMatch)))
-                .then(Commands.literal("player")
-                        .requires(source -> source.hasPermission(2))
-                        .then(Commands.argument("name", StringArgumentType.string())
-                                .then(Commands.literal("quit")
-                                        .then(Commands.argument("player", EntityArgument.player())
-                                                .executes(CSCommand::executeKickPlayer)))))
-                .then(Commands.literal("watch")
-                        .then(Commands.argument("name", StringArgumentType.string())
-                                .executes(CSCommand::executeWatchMatch)
-                                .then(Commands.literal("quit")
-                                        .executes(CSCommand::executeUnwatchMatch))))
+            // --- 通用与玩家指令 ---
+            .then(Commands.literal("list").executes(CSCommand::executeListMatches))
+            .then(Commands.literal("join")
+                .then(Commands.argument("name", StringArgumentType.string())
+                    .executes(CSCommand::executeJoinMatch)))
+            .then(Commands.literal("player")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.argument("name", StringArgumentType.string())
+                    .then(Commands.literal("quit")
+                        .then(Commands.argument("player", EntityArgument.player())
+                            .executes(CSCommand::executeKickPlayer)))))
+            .then(Commands.literal("watch")
+                .then(Commands.argument("name", StringArgumentType.string())
+                    .executes(CSCommand::executeWatchMatch)
+                    .then(Commands.literal("quit")
+                        .executes(CSCommand::executeUnwatchMatch))))
         );
     }
 
-    // =================================================================================
-    // SECTION: 比赛生命周期指令 (Match Lifecycle Commands)
-    // =================================================================================
-
     /**
      * 执行 `/cs start` 指令，创建一个新的比赛。
+     *
+     * @param context    指令上下文。
+     * @param maxPlayers 比赛最大玩家数。
+     * @param presetName 要加载的预设名称，可为 null。
+     * @return 指令执行结果。
      */
-    private static int executeStartMatch(CommandContext<CommandSourceStack> context, String presetName) {
+    private static int executeStartMatch(CommandContext<CommandSourceStack> context, int maxPlayers, String presetName) {
         CommandSourceStack source = context.getSource();
         String matchName = StringArgumentType.getString(context, "name");
-        
-        // **[修复]** 将 maxPlayers 声明为 final 以在 lambda 中使用
-        final int maxPlayers;
-        try {
-            maxPlayers = IntegerArgumentType.getInteger(context, "players");
-        } catch (IllegalArgumentException e) {
-            maxPlayers = 10;
-        }
 
         if (MatchManager.getMatch(matchName) != null) {
             source.sendFailure(Component.literal("错误：同名比赛 '" + matchName + "' 已存在！"));
@@ -159,11 +156,12 @@ public final class CSCommand {
             return 0;
         }
 
+        // 如果提供了预设名称，则尝试加载并应用
         if (presetName != null) {
             MatchPreset preset = PresetManager.loadPreset(presetName, source.getServer());
             if (preset == null) {
                 source.sendFailure(Component.literal("错误：找不到名为 '" + presetName + "' 的预设！比赛创建已取消。"));
-                MatchManager.removeMatch(matchName);
+                MatchManager.removeMatch(matchName); // 清理创建失败的比赛
                 return 0;
             }
             match.applyPreset(preset);
@@ -172,6 +170,7 @@ public final class CSCommand {
             source.sendSuccess(() -> Component.literal("比赛 '" + matchName + "' 已创建！最大人数: " + maxPlayers), true);
         }
 
+        // 创建游戏内队伍
         executeServerCommand(source, "team add " + match.getCtTeamName() + " '{\"text\":\"Counter-Terrorists\",\"color\":\"blue\"}'");
         executeServerCommand(source, "team modify " + match.getCtTeamName() + " friendlyFire " + ServerConfig.friendlyFireEnabled);
         executeServerCommand(source, "team add " + match.getTTeamName() + " '{\"text\":\"Terrorists\",\"color\":\"gold\"}'");
@@ -179,9 +178,13 @@ public final class CSCommand {
 
         return 1;
     }
-
+    
     /**
      * 执行 `/cs began` 指令，正式开始一场处于准备阶段的比赛。
+     *
+     * @param context 指令上下文。
+     * @param force   是否强制开始（忽略人数不足或队伍不平衡的警告）。
+     * @return 指令执行结果。
      */
     private static int executeBeganMatch(CommandContext<CommandSourceStack> context, boolean force) {
         CommandSourceStack source = context.getSource();
@@ -197,6 +200,7 @@ public final class CSCommand {
             return 0;
         }
 
+        // 检查开始条件
         if (!force) {
             if (match.getPlayerCount() < 2) {
                 source.sendFailure(Component.literal("警告：比赛至少需要2名玩家才能开始！"));
@@ -221,9 +225,12 @@ public final class CSCommand {
         }
         return 1;
     }
-
+    
     /**
      * 执行 `/cs end` 指令，强制结束一场比赛。
+     *
+     * @param context 指令上下文。
+     * @return 指令执行结果。
      */
     private static int executeEndMatch(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
@@ -237,11 +244,15 @@ public final class CSCommand {
         source.sendSuccess(() -> Component.literal("已强制结束并清理了比赛 '" + matchName + "'。"), true);
         return 1;
     }
-
-    // =================================================================================
-    // SECTION: 比赛与地图设置指令 (Match & Map Setup Commands)
-    // =================================================================================
-
+    
+    /**
+     * 执行 `/cs match <name> set spawnpoint <team> <pos>` 指令。
+     *
+     * @param context 指令上下文。
+     * @param team    要设置出生点的队伍 ("CT" 或 "T")。
+     * @return 指令执行结果。
+     * @throws CommandSyntaxException 如果坐标参数无效。
+     */
     private static int executeSetSpawnpoint(CommandContext<CommandSourceStack> context, String team) throws CommandSyntaxException {
         CommandSourceStack source = context.getSource();
         String matchName = StringArgumentType.getString(context, "name");
@@ -256,7 +267,15 @@ public final class CSCommand {
         source.sendSuccess(() -> Component.literal("已为比赛 '" + matchName + "' 添加 " + team + " 方出生点: " + pos.toShortString()), true);
         return 1;
     }
-
+    
+    /**
+     * 执行 `/cs match <name> set bombsite <A|B> <from> <to>` 指令。
+     *
+     * @param context 指令上下文。
+     * @param site    要设置的包点 ("A" 或 "B")。
+     * @return 指令执行结果。
+     * @throws CommandSyntaxException 如果坐标参数无效。
+     */
     private static int executeSetBombsite(CommandContext<CommandSourceStack> context, String site) throws CommandSyntaxException {
         CommandSourceStack source = context.getSource();
         String matchName = StringArgumentType.getString(context, "name");
@@ -268,10 +287,17 @@ public final class CSCommand {
         BlockPos from = BlockPosArgument.getLoadedBlockPos(context, "from");
         BlockPos to = BlockPosArgument.getLoadedBlockPos(context, "to");
 
-        // **[修复]** API变更: AABB构造函数需要min/max坐标
+        // [修复] AABB 构造函数 API 变更
+        // 旧的 AABB(BlockPos, BlockPos) 构造函数已不存在。
+        // 新方法是提供最小和最大的x, y, z坐标来创建一个边界框。
+        // 为了确保区域完全包含 'to' 方块，我们需要在最大坐标上加1。
         AABB area = new AABB(
-            Math.min(from.getX(), to.getX()), Math.min(from.getY(), to.getY()), Math.min(from.getZ(), to.getZ()),
-            Math.max(from.getX(), to.getX()) + 1.0, Math.max(from.getY(), to.getY()) + 1.0, Math.max(from.getZ(), to.getZ()) + 1.0
+            Math.min(from.getX(), to.getX()),
+            Math.min(from.getY(), to.getY()),
+            Math.min(from.getZ(), to.getZ()),
+            Math.max(from.getX(), to.getX()) + 1.0,
+            Math.max(from.getY(), to.getY()) + 1.0,
+            Math.max(from.getZ(), to.getZ()) + 1.0
         );
 
         if ("A".equals(site)) match.setBombsiteA(area);
@@ -279,8 +305,73 @@ public final class CSCommand {
         source.sendSuccess(() -> Component.literal("已为比赛 '" + matchName + "' 设置 " + site + " 包点区域"), true);
         return 1;
     }
+    
+    // ... 其他 execute 方法 ...
 
-    private static int executeSetNumRounds(CommandContext<CommandSourceStack> context) {
+    /**
+     * 执行 `/cs join` 指令，让玩家加入一场比赛。
+     *
+     * @param context 指令上下文。
+     * @return 指令执行结果。
+     * @throws CommandSyntaxException 如果指令不是由玩家执行的。
+     */
+    private static int executeJoinMatch(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        String matchName = StringArgumentType.getString(context, "name");
+        Match match = MatchManager.getMatch(matchName);
+
+        if (match == null) {
+            context.getSource().sendFailure(Component.literal("错误：未找到名为 '" + matchName + "' 的比赛。"));
+            return 0;
+        }
+        if (match.getState() != Match.MatchState.PREPARING) {
+            context.getSource().sendFailure(Component.literal("错误：比赛 '" + matchName + "' 已经开始或已结束。"));
+            return 0;
+        }
+        if (MatchManager.getPlayerMatch(player) != null) {
+            context.getSource().sendFailure(Component.literal("错误：你已经在一场比赛中了。"));
+            return 0;
+        }
+        if (match.getPlayerCount() >= match.getMaxPlayers()) {
+            context.getSource().sendFailure(Component.literal("错误：比赛 '" + matchName + "' 已满员。"));
+            return 0;
+        }
+
+        // 自动平衡队伍
+        String teamToJoin = (match.getCtCount() <= match.getTCount()) ? "CT" : "T";
+        String teamName = "CT".equals(teamToJoin) ? match.getCtTeamName() : match.getTTeamName();
+
+        executeServerCommand(context.getSource(), "team join " + teamName + " " + player.getName().getString());
+        match.addPlayer(player, teamToJoin);
+
+        Component teamComponent = "CT".equals(teamToJoin) ? Component.literal("反恐精英").withStyle(ChatFormatting.BLUE) : Component.literal("恐怖分子").withStyle(ChatFormatting.GOLD);
+        context.getSource().sendSuccess(() -> Component.literal("你已成功加入比赛 '").append(matchName).append("'，阵营为 ").append(teamComponent), false);
+        return 1;
+    }
+    
+    // ... 其他方法 ...
+
+    /**
+     * 辅助方法，用于在服务器端执行一条指令。
+     *
+     * @param source  指令源。
+     * @param command 要执行的指令字符串。
+     */
+    private static void executeServerCommand(CommandSourceStack source, String command) {
+        source.getServer().getCommands().performPrefixedCommand(source.getServer().createCommandSourceStack(), command);
+    }
+    
+    /**
+     * 辅助方法，用于向需要强制开始的玩家发送提示信息。
+     *
+     * @param source    指令源。
+     * @param matchName 比赛名称。
+     */
+    private static void sendForceStartMessage(CommandSourceStack source, String matchName) {
+        source.sendSystemMessage(Component.literal("如果仍要强制开始，请使用 ").append(Component.literal("/cs began " + matchName + " yes").withStyle(ChatFormatting.AQUA)));
+    }
+    
+        private static int executeSetNumRounds(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
         String matchName = StringArgumentType.getString(context, "name");
         Match match = MatchManager.getMatch(matchName);
@@ -327,10 +418,6 @@ public final class CSCommand {
         return 1;
     }
 
-    // =================================================================================
-    // SECTION: 预设与配置指令 (Preset & Config Commands)
-    // =================================================================================
-
     private static int executeSaveMatchPreset(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
         String matchName = StringArgumentType.getString(context, "name");
@@ -369,6 +456,7 @@ public final class CSCommand {
             context.getSource().sendFailure(Component.literal("错误：你的主手上没有物品！"));
             return 0;
         }
+        // 使用更新后的工具方法
         String itemIdString = ItemNBTHelper.toCommandString(heldItem, context.getSource().registryAccess());
         if (itemIdString.isEmpty()) {
             context.getSource().sendFailure(Component.literal("错误：无法识别你手中的物品。"));
@@ -376,68 +464,34 @@ public final class CSCommand {
         }
         List<String> newGearList = List.of(itemIdString);
 
-        // **[修复]** 使用 public 字段访问
         if ("CT".equals(team)) {
             ServerConfig.CT_PISTOL_ROUND_GEAR_SPEC.set(newGearList);
         } else {
             ServerConfig.T_PISTOL_ROUND_GEAR_SPEC.set(newGearList);
         }
-        // 注意: ModConfigSpec 的 set 方法不会立即保存到文件，这通常在游戏关闭或配置重载时发生
+        // 注意: set() 只在内存中修改，需要游戏重启或配置重载命令来保存到文件
         context.getSource().sendSuccess(() -> Component.literal(team + " 方的手枪局初始装备已设置为: ").append(heldItem.getDisplayName().copy().withStyle(ChatFormatting.YELLOW)), true);
         return 1;
     }
 
-    // =================================================================================
-    // SECTION: 通用与玩家指令 (General & Player Commands)
-    // =================================================================================
-
     private static int executeListMatches(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
-        Collection<Match> matches = MatchManager.getAllMatches();
+        var matches = MatchManager.getAllMatches();
         if (matches.isEmpty()) {
             source.sendSuccess(() -> Component.literal("当前没有正在准备或进行的比赛。"), false);
             return 1;
         }
         MutableComponent message = Component.literal("--- 比赛列表 ---");
-        matches.forEach(match -> {
-            Component state = match.getState() == Match.MatchState.PREPARING ? Component.literal(" [准备中]").withStyle(ChatFormatting.GREEN) : Component.literal(" [进行中]").withStyle(ChatFormatting.RED);
-            message.append(Component.literal("\n - " + match.getName())).append(state);
-        });
+        for (Match match : matches) {
+            MutableComponent matchLine = Component.literal("\n - " + match.getName());
+            if (match.getState() == Match.MatchState.PREPARING) {
+                matchLine.append(Component.literal(" [准备中]").withStyle(ChatFormatting.GREEN));
+            } else if (match.getState() == Match.MatchState.IN_PROGRESS) {
+                matchLine.append(Component.literal(" [进行中]").withStyle(ChatFormatting.RED));
+            }
+            message.append(matchLine);
+        }
         source.sendSuccess(() -> message, false);
-        return 1;
-    }
-
-    private static int executeJoinMatch(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        ServerPlayer player = context.getSource().getPlayerOrException();
-        String matchName = StringArgumentType.getString(context, "name");
-        Match match = MatchManager.getMatch(matchName);
-
-        if (match == null) {
-            context.getSource().sendFailure(Component.literal("错误：未找到名为 '" + matchName + "' 的比赛。"));
-            return 0;
-        }
-        if (match.getState() != Match.MatchState.PREPARING) {
-            context.getSource().sendFailure(Component.literal("错误：比赛 '" + matchName + "' 已经开始或已结束。"));
-            return 0;
-        }
-        if (MatchManager.getPlayerMatch(player) != null) {
-            context.getSource().sendFailure(Component.literal("错误：你已经在一场比赛中了。"));
-            return 0;
-        }
-        if (match.getPlayerCount() >= match.getMaxPlayers()) {
-            context.getSource().sendFailure(Component.literal("错误：比赛 '" + matchName + "' 已满员。"));
-            return 0;
-        }
-
-        // 自动平衡队伍
-        String teamToJoin = (match.getCtCount() <= match.getTCount()) ? "CT" : "T";
-        String teamName = "CT".equals(teamToJoin) ? match.getCtTeamName() : match.getTTeamName();
-
-        executeServerCommand(context.getSource(), "team join " + teamName + " " + player.getName().getString());
-        match.addPlayer(player, teamToJoin);
-
-        Component teamComponent = "CT".equals(teamToJoin) ? Component.literal("反恐精英").withStyle(ChatFormatting.BLUE) : Component.literal("恐怖分子").withStyle(ChatFormatting.GOLD);
-        context.getSource().sendSuccess(() -> Component.literal("你已成功加入比赛 '").append(matchName).append("'，阵营为 ").append(teamComponent), false);
         return 1;
     }
 
@@ -446,17 +500,14 @@ public final class CSCommand {
         String matchName = StringArgumentType.getString(context, "name");
         ServerPlayer playerToKick = EntityArgument.getPlayer(context, "player");
         Match match = MatchManager.getMatch(matchName);
-
         if (match == null || !match.getPlayerStats().containsKey(playerToKick.getUUID())) {
             source.sendFailure(Component.literal("错误：玩家 " + playerToKick.getName().getString() + " 不在该比赛中。"));
             return 0;
         }
 
-        // 从比赛和队伍中移除
         executeServerCommand(source, "team leave " + playerToKick.getName().getString());
         match.removePlayer(playerToKick);
 
-        // 重置玩家状态并传送
         playerToKick.setGameMode(GameType.SURVIVAL);
         playerToKick.removeAllEffects();
         executeServerCommand(source, "attribute " + playerToKick.getName().getString() + " minecraft:generic.knockback_resistance base set 0.0");
@@ -468,7 +519,7 @@ public final class CSCommand {
         playerToKick.sendSystemMessage(Component.literal("你已被管理员移出比赛。").withStyle(ChatFormatting.RED));
         return 1;
     }
-
+    
     private static int executeWatchMatch(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer spectator = context.getSource().getPlayerOrException();
         String matchName = StringArgumentType.getString(context, "name");
@@ -489,7 +540,6 @@ public final class CSCommand {
             return 0;
         }
 
-        // 随机选择一个玩家进行观战
         ServerPlayer target = alivePlayers.get(new Random().nextInt(alivePlayers.size()));
         spectator.setGameMode(GameType.SPECTATOR);
         spectator.setCamera(target);
@@ -506,24 +556,4 @@ public final class CSCommand {
         context.getSource().sendSuccess(() -> Component.literal("你已退出观战模式。"), false);
         return 1;
     }
-
-
-    // =================================================================================
-    // SECTION: 辅助方法 (Utility Methods)
-    // =================================================================================
-
-    /**
-     * 辅助方法，用于向需要强制开始的玩家发送提示信息。
-     */
-    private static void sendForceStartMessage(CommandSourceStack source, String matchName) {
-        source.sendSystemMessage(Component.literal("如果仍要强制开始，请使用 ").append(Component.literal("/cs began " + matchName + " yes").withStyle(ChatFormatting.AQUA)));
-    }
-
-    /**
-     * 辅助方法，用于在服务器端执行一条指令。
-     */
-    private static void executeServerCommand(CommandSourceStack source, String command) {
-        source.getServer().getCommands().performPrefixedCommand(source.getServer().createCommandSourceStack(), command);
-    }
 }
-
