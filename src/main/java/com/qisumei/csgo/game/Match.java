@@ -281,6 +281,33 @@ public class Match {
     }
 
     /**
+     * 【新增】计算并返回一个包围了比赛所有关键点的大致区域。
+     * 用于在大范围内搜索实体，如掉落的C4。
+     * @return AABB 区域包围盒，如果没有设置任何点则返回null。
+     */
+    public AABB getMatchAreaBoundingBox() {
+        List<BlockPos> allPositions = new ArrayList<>();
+        allPositions.addAll(ctSpawns);
+        allPositions.addAll(tSpawns);
+        if (bombsiteA != null) {
+            allPositions.add(BlockPos.containing(bombsiteA.getCenter()));
+        }
+        if (bombsiteB != null) {
+            allPositions.add(BlockPos.containing(bombsiteB.getCenter()));
+        }
+
+        if (allPositions.isEmpty()) {
+            return null;
+        }
+
+        AABB boundingBox = new AABB(allPositions.get(0));
+        for (BlockPos pos : allPositions) {
+            boundingBox = boundingBox.minmax(new AABB(pos));
+        }
+        return boundingBox;
+    }
+
+    /**
      * 在购买阶段检查玩家是否超出购买区域，如果超出则传送回出生点。
      */
     private void checkPlayerBuyZone() {
@@ -1275,6 +1302,9 @@ public class Match {
     
     public void setBombsiteA(AABB area) { this.bombsiteA = area; }
     public void setBombsiteB(AABB area) { this.bombsiteB = area; }
+    public AABB getBombsiteB() {return this.bombsiteB;}
+    public AABB getBombsiteA() {return this.bombsiteA;}
+
     
     /**
      * 检查一个玩家是否在任何一个包点内。

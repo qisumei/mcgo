@@ -1,19 +1,24 @@
-// 新建文件: src/main/java/com/qisumei/csgo/c4/C4Manager.java
-
+// 文件: src/main/java/com/qisumei/csgo/c4/C4Manager.java
 package com.qisumei.csgo.c4;
 
+import com.qisumei.csgo.QisCSGO;
 import com.qisumei.csgo.c4.handler.C4CountdownHandler;
 import com.qisumei.csgo.game.Match;
 import com.qisumei.csgo.game.PlayerStats;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -30,33 +35,81 @@ public class C4Manager {
     private boolean isPlanted = false;
     private BlockPos c4Pos;
 
+    // C4掉落物广播计时器
+    private int c4BroadcastCooldown = 0;
+
     // 拆弹相关
     private static final int DEFUSE_TIME_TICKS = 6 * 20; // 空手拆弹6秒
     private static final int DEFUSE_TIME_WITH_KIT_TICKS = 3 * 20; // 使用拆弹器3秒
     private final Map<UUID, Integer> defusingPlayers = new HashMap<>();
 
-    /**
-     * 构造函数，初始化C4管理器
-     * @param match 对当前比赛的引用，用于回调比赛相关功能
-     */
     public C4Manager(Match match) {
         this.match = match;
-        // C4CountdownHandler现在由C4Manager拥有和管理
         this.countdownHandler = new C4CountdownHandler(this);
     }
 
     /**
-     * 每tick调用，用于处理需要持续更新的逻辑
-     * 主要职责：驱动倒计时处理器的tick逻辑
+     * 每tick调用，用于处理需要持续更新的逻辑。
      */
     public void tick() {
+        // 更新C4安放后的倒计时
         countdownHandler.tick();
+        // 更新C4掉落时的距离显示
+        handleDroppedC4Tick();
     }
 
     /**
-     * 重置C4状态，用于新回合开始
-     * 清理所有C4相关状态，移除已安放的C4方块，停止倒计时
+     * 【新增】处理C4掉落在地上时的坐标广播和距离显示。
      */
+    private void handleDroppedC4Tick() {
+        // 只有在C4未安放时才检查掉落物
+        if (isPlanted) {
+            return;
+        }
+
+        ItemEntity droppedC4 = findDroppedC4();
+        if (droppedC4 != null) {
+            // --- 坐标广播逻辑 ---
+            if (c4BroadcastCooldown <= 0) {
+                c4BroadcastCooldown = 20; // 每秒广播一次
+                BlockPos c4DropPos = droppedC4.blockPosition();
+                Component message = Component.literal("C4掉落在: " + c4DropPos.getX() + ", " + c4DropPos.getY() + ", " + c4DropPos.getZ()).withStyle(ChatFormatting.YELLOW);
+                match.broadcastToTeam(message, "T");
+            }
+            c4BroadcastCooldown--;
+
+            // --- 距离显示逻辑 ---
+            for (UUID playerUUID : match.getAlivePlayers()) {
+                ServerPlayer player = match.getServer().getPlayerList().getPlayer(playerUUID);
+                if (player == null) continue;
+
+                PlayerStats stats = match.getPlayerStats().get(playerUUID);
+                if (stats != null && "T".equals(stats.getTeam())) {
+                    double distance = player.distanceTo(droppedC4);
+                    String distanceString = String.format("%.1f", distance);
+                    Component distanceMessage = Component.literal("距离C4: " + distanceString + "米").withStyle(ChatFormatting.YELLOW);
+                    player.sendSystemMessage(distanceMessage, true); // 发送到Action Bar
+                }
+            }
+        } else {
+            c4BroadcastCooldown = 0; // 重置计时器
+        }
+    }
+
+    /**
+     * 【新增】在比赛区域内寻找掉落的C4实体。
+     * @return 如果找到，则返回ItemEntity对象；否则返回null。
+     */
+    private ItemEntity findDroppedC4() {
+        AABB searchBox = match.getMatchAreaBoundingBox();
+        if (searchBox == null) return null;
+
+        List<ItemEntity> items = match.getServer().overworld().getEntitiesOfClass(ItemEntity.class, searchBox.inflate(50.0),
+            item -> item.getItem().is(QisCSGO.C4_ITEM.get()));
+
+        return items.isEmpty() ? null : items.get(0);
+    }
+
     public void reset() {
         if (isPlanted && c4Pos != null) {
             match.getServer().overworld().removeBlock(c4Pos, false);
@@ -67,32 +120,24 @@ public class C4Manager {
         this.c4Pos = null;
     }
 
-    /**
-     * 当C4被安放时调用，初始化C4安放状态
-     * @param pos C4被安放的位置
-     */
     public void onC4Planted(BlockPos pos) {
         this.isPlanted = true;
         this.c4Pos = pos;
         countdownHandler.start(pos);
 
-        String siteName = "未知地点";
-        if (match.isPosInBombsite(pos)) {
-            // 这里可以添加更精确的包点判断逻辑
-             siteName = "包点";
+        String siteName = "包点"; // 默认
+        if(match.getBombsiteA() != null && match.getBombsiteA().contains(pos.getCenter())){
+            siteName = "A点";
+        } else if(match.getBombsiteB() != null && match.getBombsiteB().contains(pos.getCenter())){
+            siteName = "B点";
         }
 
         Component message = Component.literal("§e[信息] §f炸弹已安放在 §a" + siteName + "！");
         match.broadcastToAllPlayersInMatch(message);
 
-        // 告知Match类回合时间需要改变
         match.onC4PlantedUpdateMatchTimer();
     }
 
-    /**
-     * 当C4被成功拆除时调用，处理拆弹成功逻辑
-     * @param defuser 拆除C4的玩家，可为null表示未知玩家
-     */
     public void onC4Defused(ServerPlayer defuser) {
         if (match.getRoundState() == Match.RoundState.IN_PROGRESS) {
             countdownHandler.stop();
@@ -102,9 +147,6 @@ public class C4Manager {
         }
     }
 
-    /**
-     * 当C4爆炸时调用，处理爆炸逻辑和回合结束
-     */
     public void onC4Exploded() {
         if (c4Pos != null) {
             match.applyCustomExplosionDamage(c4Pos);
@@ -112,10 +154,6 @@ public class C4Manager {
         match.endRound("T", "炸弹已爆炸");
     }
 
-    /**
-     * 处理玩家每一tick的拆弹逻辑，包括进度跟踪和完成检测
-     * @param player 正在被检测的玩家
-     */
     public void handlePlayerDefuseTick(ServerPlayer player) {
         if (isPlayerEligibleToDefuse(player)) {
             int currentProgress = defusingPlayers.getOrDefault(player.getUUID(), 0);
@@ -126,7 +164,6 @@ public class C4Manager {
             int totalDefuseTime = hasKit ? DEFUSE_TIME_WITH_KIT_TICKS : DEFUSE_TIME_TICKS;
 
             if (currentProgress >= totalDefuseTime) {
-                // 拆除成功，移除C4方块，这将触发C4Block.onRemove -> onC4Defused
                 match.getServer().overworld().removeBlock(c4Pos, false);
             } else {
                 displayDefuseProgress(player, currentProgress, totalDefuseTime);
@@ -134,18 +171,13 @@ public class C4Manager {
         } else {
             if (defusingPlayers.containsKey(player.getUUID())) {
                 defusingPlayers.remove(player.getUUID());
-                player.sendSystemMessage(Component.literal(""), true); // 清空action bar
+                player.sendSystemMessage(Component.literal(""), true); 
             }
         }
     }
 
     // --- Helper 和 Getter 方法 ---
 
-    /**
-     * 检查玩家是否符合拆弹条件
-     * @param player 要检查的玩家
-     * @return 如果玩家符合拆弹条件返回true，否则返回false
-     */
     private boolean isPlayerEligibleToDefuse(ServerPlayer player) {
         if (!this.isPlanted) return false;
         
@@ -165,12 +197,6 @@ public class C4Manager {
         return hitResult.getType() == HitResult.Type.BLOCK && hitResult.getBlockPos().equals(this.c4Pos);
     }
 
-    /**
-     * 在玩家action bar上显示拆弹进度条
-     * @param player 要显示进度的玩家
-     * @param current 当前进度值
-     * @param total 总进度值
-     */
     private void displayDefuseProgress(ServerPlayer player, int current, int total) {
         int percentage = (int) (((float) current / total) * 100);
         int barsFilled = (int) (((float) current / total) * 10);
@@ -185,26 +211,14 @@ public class C4Manager {
         player.sendSystemMessage(message, true);
     }
 
-    /**
-     * 获取C4是否已安放的状态
-     * @return 如果C4已安放返回true，否则返回false
-     */
     public boolean isC4Planted() {
         return this.isPlanted;
     }
 
-    /**
-     * 获取C4方块的位置
-     * @return C4方块的位置，如果未安放返回null
-     */
     public BlockPos getC4Pos() {
         return this.c4Pos;
     }
     
-    /**
-     * 获取关联的Match实例
-     * @return 当前关联的Match实例
-     */
     public Match getMatch() {
         return this.match;
     }
