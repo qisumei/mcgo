@@ -13,10 +13,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.Marker;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
@@ -75,35 +72,10 @@ public class GameEventsHandler {
                         // 2. 将玩家物品栏中对应格子的物品清空。
                         player.getInventory().setItem(i, ItemStack.EMPTY);
                         
-                        // 3. 调用玩家实体的 drop 方法，将C4副本扔到地上，并捕获返回的ItemEntity。
-                        // --- (开始修改) ---
-                        ItemEntity c4Entity = player.drop(c4ToDrop, false, false);
-
-                        // --- (开始修改) ---
-                        if (c4Entity != null) {
-                            // 1. 创建一个新的 Marker 实体
-                            Marker marker = new Marker(EntityType.MARKER, player.level());
-                            
-                            // 2. 设置 Marker 的位置与 C4 相同
-                            marker.setPos(c4Entity.getX(), c4Entity.getY(), c4Entity.getZ());
-                            
-                            // 3. 设置 Marker 的自定义名称
-                            marker.setCustomName(Component.literal("C4").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD));
-                            marker.setCustomNameVisible(true);
-                            
-                            // 4. 将 Marker 添加到世界中
-                            player.level().addFreshEntity(marker);
-                            
-                            // 5. 【核心】让 Marker "骑" 在 C4 物品上，这样它们会一起移动
-                            marker.startRiding(c4Entity, true);
-
-                            // 6. 将 Marker (而不是 C4 物品) 加入 T 队
-                            net.minecraft.world.scores.Scoreboard scoreboard = player.server.getScoreboard();
-                            net.minecraft.world.scores.PlayerTeam tTeam = scoreboard.getPlayerTeam(match.getTTeamName());
-                            if (tTeam != null) {
-                                scoreboard.addPlayerToTeam(marker.getStringUUID(), tTeam);
-                            }
-                        }
+                        // 3. 调用玩家实体的 drop 方法，将C4副本扔到地上。
+                        //    第二个参数 'false' 意味着即使玩家死亡也扔出物品。
+                        //    第三个参数 'false' 意味着这不是玩家主动丢弃的，不会有拾取延迟。
+                        player.drop(c4ToDrop, false, false);
 
                         // 4. 给玩家一个明确的提示。
                         player.sendSystemMessage(Component.literal("§c作为CT，你不能持有C4！已强制丢弃。").withStyle(ChatFormatting.RED));
@@ -168,34 +140,9 @@ public class GameEventsHandler {
 
                 // 如果物品不受保护，则将其掉落
                 if (!isProtected) {
-                    ItemEntity droppedItem = deadPlayer.drop(stack.copy(), true, false);
+                    deadPlayer.drop(stack.copy(), true, false);
+                    // 清空该物品栏格子
                     deadPlayer.getInventory().setItem(i, ItemStack.EMPTY);
-
-                    // --- (开始修改) ---
-                    if (droppedItem != null && droppedItem.getItem().is(QisCSGO.C4_ITEM.get())) {
-                        // 1. 创建一个新的 Marker 实体
-                        Marker marker = new Marker(EntityType.MARKER, deadPlayer.level());
-                        
-                        // 2. 设置 Marker 的位置与 C4 相同
-                        marker.setPos(droppedItem.getX(), droppedItem.getY(), droppedItem.getZ());
-                        
-                        // 3. 设置 Marker 的自定义名称
-                        marker.setCustomName(Component.literal("C4").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD));
-                        marker.setCustomNameVisible(true);
-                        
-                        // 4. 将 Marker 添加到世界中
-                        deadPlayer.level().addFreshEntity(marker);
-
-                        // 5. 【核心】让 Marker "骑" 在 C4 物品上
-                        marker.startRiding(droppedItem, true);
-
-                        // 6. 将 Marker 加入 T 队
-                        net.minecraft.world.scores.Scoreboard scoreboard = deadPlayer.server.getScoreboard();
-                        net.minecraft.world.scores.PlayerTeam tTeam = scoreboard.getPlayerTeam(match.getTTeamName());
-                        if (tTeam != null) {
-                            scoreboard.addPlayerToTeam(marker.getStringUUID(), tTeam);
-                        }
-                    }
                 }
             }
 
