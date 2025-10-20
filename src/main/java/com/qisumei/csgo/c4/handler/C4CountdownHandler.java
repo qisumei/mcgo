@@ -1,7 +1,7 @@
 package com.qisumei.csgo.c4.handler;
 
+import com.qisumei.csgo.c4.C4Manager;
 import com.qisumei.csgo.c4.sound.ModSounds;
-import com.qisumei.csgo.game.Match;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -9,9 +9,10 @@ import net.minecraft.sounds.SoundSource;
 
 /**
  * C4倒计时处理器，用于管理C4炸弹的倒计时逻辑、声音播放和广播提示。
+ * 现在由C4Manager统一管理，实现更好的模块化。
  */
 public class C4CountdownHandler {
-    private final Match match;
+    private final C4Manager c4Manager;
     private BlockPos c4Pos;
     private int ticksLeft;
     private int nextBeepTick;
@@ -21,10 +22,10 @@ public class C4CountdownHandler {
     /**
      * 构造一个C4倒计时处理器实例。
      *
-     * @param match 当前比赛的Match对象，用于获取服务器信息和广播消息
+     * @param c4Manager C4管理器实例，用于回调C4相关事件
      */
-    public C4CountdownHandler(Match match) {
-        this.match = match;
+    public C4CountdownHandler(C4Manager c4Manager) {
+        this.c4Manager = c4Manager;
     }
 
     /**
@@ -40,7 +41,7 @@ public class C4CountdownHandler {
         this.isActive = true;
 
         // 广播炸弹安放警告
-        match.broadcastToAllPlayersInMatch(Component.literal("§c[警报] 炸弹已安放！"));
+        c4Manager.getMatch().broadcastToAllPlayersInMatch(Component.literal("§c[警报] 炸弹已安放！"));
         playBeepSound();
     }
 
@@ -62,7 +63,7 @@ public class C4CountdownHandler {
 
         // 倒计时结束，触发爆炸
         if (ticksLeft <= 0) {
-            match.onC4Exploded();
+            c4Manager.onC4Exploded();
             stop();
             return;
         }
@@ -75,7 +76,7 @@ public class C4CountdownHandler {
 
         // 倒计时剩余10秒时广播警告
         if (!announced10 && ticksLeft <= 10 * 20) {
-            match.broadcastToAllPlayersInMatch(Component.literal("§e[警告] 10秒后爆炸！"));
+            c4Manager.getMatch().broadcastToAllPlayersInMatch(Component.literal("§e[警告] 10秒后爆炸！"));
             announced10 = true;
         }
     }
@@ -84,7 +85,7 @@ public class C4CountdownHandler {
      * 播放C4提示音效。
      */
     private void playBeepSound() {
-        MinecraftServer server = match.getServer();
+        MinecraftServer server = c4Manager.getMatch().getServer();
         if (server == null || c4Pos == null) return;
 
         server.overworld().playSound(null, c4Pos, ModSounds.ALARM_SOUND(), SoundSource.BLOCKS, 2.0f, 1.0f);
@@ -102,5 +103,4 @@ public class C4CountdownHandler {
         if (progress > 0.6) return 10;
         return Math.max(15, (int)(40 * (1 - progress * 0.7f)));
     }
-
 }
