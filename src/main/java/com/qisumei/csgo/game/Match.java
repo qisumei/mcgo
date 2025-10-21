@@ -392,7 +392,7 @@ public class Match {
             
             stats.clearRoundGear();
 
-            player.setGameMode(GameType.SURVIVAL);
+            player.setGameMode(GameType.ADVENTURE);
             player.setHealth(player.getMaxHealth());
             player.getFoodData().setFoodLevel(20);
             player.removeAllEffects();

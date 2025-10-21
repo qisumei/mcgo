@@ -108,7 +108,7 @@ public class C4TickTask {
 
     private void handleC4PlantingHint(ServerPlayer player) {
         boolean holdingC4 = player.getMainHandItem().is(QisCSGO.C4_ITEM.get()) || player.getOffhandItem().is(QisCSGO.C4_ITEM.get());
-        if (holdingC4 && match.getRoundState() == Match.RoundState.IN_PROGRESS) {
+        if (holdingC4 && match.getRoundState() == Match.RoundState.IN_PROGRESS && !player.isUsingItem()) {
             if (match.isPlayerInBombsite(player)) {
                 Component message = Component.literal("你正处于炸弹安放区，可以安放C4！").withStyle(ChatFormatting.GREEN);
                 player.sendSystemMessage(message, true);
