@@ -1,6 +1,7 @@
 package com.qisumei.csgo.c4.task;
 
 import com.qisumei.csgo.c4.C4Manager;
+import com.qisumei.csgo.game.MatchContext;
 import com.qisumei.csgo.game.PlayerStats;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -20,6 +21,7 @@ import java.util.UUID;
 public class C4DefuseTask {
 
     private final C4Manager c4Manager;
+    private final MatchContext context;
 
     private static final int DEFUSE_TIME_TICKS = 6 * 20; // 空手拆弹6秒
     private static final int DEFUSE_TIME_WITH_KIT_TICKS = 3 * 20; // 使用拆弹器3秒
@@ -27,6 +29,7 @@ public class C4DefuseTask {
 
     public C4DefuseTask(C4Manager c4Manager) {
         this.c4Manager = c4Manager;
+        this.context = c4Manager.getContext();
     }
 
     /**
@@ -35,7 +38,8 @@ public class C4DefuseTask {
      */
     public void handlePlayerDefuseTick(ServerPlayer player) {
         // 仅当C4已安放且玩家是CT时才执行
-        if (!c4Manager.isC4Planted() || !"CT".equals(getPlayerStats(player).getTeam())) {
+        PlayerStats ps = getPlayerStats(player);
+        if (!c4Manager.isC4Planted() || ps == null || !"CT".equals(ps.getTeam())) {
             return;
         }
 
@@ -49,7 +53,9 @@ public class C4DefuseTask {
 
             if (currentProgress >= totalDefuseTime) {
                 // 拆除成功，移除C4方块。这将触发 C4Block.onRemove() -> c4Manager.onC4Defused()
-                c4Manager.getMatch().getServer().overworld().removeBlock(c4Manager.getC4Pos(), false);
+                if (context.getServer() != null && c4Manager.getC4Pos() != null) {
+                    context.getServer().overworld().removeBlock(c4Manager.getC4Pos(), false);
+                }
             } else {
                 displayDefuseProgress(player, currentProgress, totalDefuseTime);
             }
@@ -102,6 +108,6 @@ public class C4DefuseTask {
     }
 
     private PlayerStats getPlayerStats(ServerPlayer player) {
-        return c4Manager.getMatch().getPlayerStats().get(player.getUUID());
+        return context.getPlayerStats().get(player.getUUID());
     }
 }

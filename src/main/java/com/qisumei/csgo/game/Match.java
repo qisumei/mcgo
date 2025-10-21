@@ -1,10 +1,14 @@
 package com.qisumei.csgo.game;
 
 import com.qisumei.csgo.QisCSGO;
+import com.qisumei.csgo.c4.C4Controller;
 import com.qisumei.csgo.c4.C4Manager;
 import com.qisumei.csgo.config.ServerConfig;
+import com.qisumei.csgo.service.EconomyService;
 import com.qisumei.csgo.game.preset.MatchPreset;
-import com.qisumei.csgo.util.ItemNBTHelper;
+import com.qisumei.csgo.service.ServiceRegistry;
+import com.qisumei.csgo.server.ServerCommandExecutor;
+import com.qisumei.csgo.server.ServerCommandExecutorImpl;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -14,22 +18,19 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.BossEvent;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.scores.DisplaySlot;
-import net.minecraft.world.scores.Objective;
-import net.minecraft.world.scores.Scoreboard;
-import net.minecraft.world.scores.criteria.ObjectiveCriteria;
+import net.minecraft.world.entity.EquipmentSlot;
 
 import java.util.*;
-import java.util.stream.Collectors;
+import java.util.function.BiConsumer;
+import java.util.Objects;
 
 /**
  * Match类，管理一场CSGO比赛的整个生命周期和所有核心逻辑。
  */
-public class Match {
+public class Match implements MatchContext {
 
     public enum MatchState { PREPARING, IN_PROGRESS, FINISHED }
     public enum RoundState { BUY_PHASE, IN_PROGRESS, ROUND_END, PAUSED }
@@ -55,8 +56,8 @@ public class Match {
     private AABB bombsiteA;
     private AABB bombsiteB;
 
-    // --- C4 管理 ---
-    private final C4Manager c4Manager;
+    // --- C4 管理---
+    private final C4Controller c4Manager;
 
     // --- 回合状态 ---
     private int currentRound;
@@ -67,24 +68,49 @@ public class Match {
     private final Set<UUID> alivePlayers;
     private String lastRoundWinner;
     private final Set<UUID> roundSurvivors;
-    private int scoreboardRebuildCounter = 0;
     // 记录每个队伍最后一名死亡玩家的位置，用于全队死亡后的观察视角
     private final Map<String, BlockPos> lastTeammateDeathPos = new HashMap<>();
 
     // --- Boss栏计时器 ---
     private final ServerBossEvent bossBar;
 
-    // --- 计分板 ---
-    private Scoreboard scoreboard;
-    private Objective objective;
+    // Area manager for map-related utilities
+    private final MatchAreaManager areaManager;
+
+    // --- 计分板管理器（职责委托） ---
+    private final MatchScoreboard scoreboardManager;
+
+    // --- 命令执行器，抽象化外部命令调用，降低耦合 ---
+    private final ServerCommandExecutor commandExecutor;
+
+    // --- 玩家相关服务（可注入） ---
+    private final PlayerService playerService;
+
+    // --- 经济服务（可注入） ---
+    private final EconomyService economyService;
+
 
     /**
      * Match类的构造函数，用于初始化一场新的比赛。
-     * @param name 比赛的唯一名称。
-     * @param maxPlayers 比赛的最大玩家数。
-     * @param server Minecraft服务器实例。
+     * 保留一个便捷的公共构造器（向后兼容），并提供一个私有的全参构造器用于依赖注入。
      */
     public Match(String name, int maxPlayers, MinecraftServer server) {
+        // 默认行为：创建默认实现的依赖并委托给全参构造器
+        this(name, maxPlayers, server,
+             null, // 不传入 c4Manager，私有构造器会创建绑定当前 Match 的默认实现
+             null,
+             null,
+             null);
+    }
+
+    /**
+     * 全依赖构造器，便于在测试或替代实现中注入自定义依赖（例如 C4Controller、MatchScoreboard、ServerCommandExecutor、PlayerService）。
+     */
+    public Match(String name, int maxPlayers, MinecraftServer server,
+                 C4Controller c4Manager,
+                 MatchScoreboard scoreboardManager,
+                 ServerCommandExecutor commandExecutor,
+                 PlayerService playerService) {
         this.name = name;
         this.state = MatchState.PREPARING;
         this.maxPlayers = maxPlayers;
@@ -94,8 +120,9 @@ public class Match {
         this.tSpawns = new ArrayList<>();
         this.totalRounds = 12;
         this.roundTimeSeconds = 120; // 默认2分钟
-        this.ctTeamName = name + "_CT";
-        this.tTeamName = name + "_T";
+        String safeName = name.replaceAll("[^a-zA-Z0-9_.-]", "");
+        this.ctTeamName = safeName + "_CT";
+        this.tTeamName = safeName + "_T";
         this.currentRound = 0;
         this.ctScore = 0;
         this.tScore = 0;
@@ -104,10 +131,12 @@ public class Match {
         this.alivePlayers = new HashSet<>();
         this.lastRoundWinner = "";
         this.roundSurvivors = new HashSet<>();
-        
-        
-        // 初始化 C4Manager，将自身引用传入
-        this.c4Manager = new C4Manager(this);
+
+        // 初始化 MatchAreaManager（负责区域/掉落物逻辑）
+        this.areaManager = new MatchAreaManager(this, () -> this.ctSpawns, () -> this.tSpawns);
+
+        // 初始化 C4 管理器，如果外部没有提供则创建默认实现并注入当前 Match
+        this.c4Manager = Objects.requireNonNullElseGet(c4Manager, () -> new C4Manager(this));
 
         // 初始化Boss栏
         this.bossBar = new ServerBossEvent(
@@ -115,6 +144,21 @@ public class Match {
             BossEvent.BossBarColor.WHITE,
             BossEvent.BossBarOverlay.PROGRESS
         );
+
+        // 初始化计分板管理器，允许注入
+        this.scoreboardManager = Objects.requireNonNullElseGet(scoreboardManager, () -> new MatchScoreboardManager(this));
+
+        // 初始化命令执行器（允许注入）
+        this.commandExecutor = Objects.requireNonNullElseGet(commandExecutor, () -> {
+            ServerCommandExecutor svcExecutor = ServiceRegistry.get(ServerCommandExecutor.class);
+            return svcExecutor != null ? svcExecutor : new ServerCommandExecutorImpl(server);
+        });
+
+        // 初始化玩家相关服务（允许注入），使用已准备好的 commandExecutor
+        this.playerService = Objects.requireNonNullElseGet(playerService, () -> new MatchPlayerService(this.commandExecutor));
+
+        // 初始化经济服务（优先使用 ServiceRegistry 中注册的实现）
+        this.economyService = ServiceRegistry.get(EconomyService.class);
     }
 
     /**
@@ -155,13 +199,19 @@ public class Match {
      * 正式开始比赛。
      */
     public void start() {
+        // 防御性检查：如果比赛没有玩家，直接返回并记录日志，避免进入不安全的运行时代码路径。
+        if (this.playerStats.isEmpty()) {
+            QisCSGO.LOGGER.warn("尝试开始比赛 '{}'，但没有玩家注册；取消开始。", this.name);
+            this.bossBar.setName(Component.literal("比赛无法开始：没有玩家"));
+            return;
+        }
+
         this.state = MatchState.IN_PROGRESS;
 
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            setPlayerKnockbackResistance(player, 1000.0);
-        }
-        setupScoreboard();
+        // 使用辅助方法遍历所有在线玩家，减少重复代码
+        forEachOnlinePlayer((player, stats) -> setPlayerKnockbackResistance(player, 1000.0));
+        // 委托计分板初始化
+        scoreboardManager.setupScoreboard();
         broadcastToAllPlayersInMatch(Component.literal("比赛开始！"));
         startNewRound();
     }
@@ -188,19 +238,14 @@ public class Match {
             ctScore, tScore
         );
         
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player != null) {
-                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "title " + player.getName().getString() + " title " + titleJson);
-            }
-        }
+        forEachOnlinePlayer((player, stats) -> commandExecutor.executeGlobal("title " + player.getName().getString() + " title " + titleJson));
 
         // 全局聊天广播比分
         String chatJson = String.format(
             "[{\"text\":\"%s：\",\"color\":\"yellow\"},{\"text\":\"CT \",\"color\":\"blue\"},{\"text\":\"%d:%d\",\"color\":\"white\",\"bold\":true},{\"text\":\" T\",\"color\":\"gold\"}]",
             this.name, ctScore, tScore
         );
-        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "tellraw @a " + chatJson);
+        commandExecutor.executeGlobal("tellraw @a " + chatJson);
 
         // 4. 设置回合状态为购买阶段
         this.roundState = RoundState.BUY_PHASE;
@@ -211,23 +256,16 @@ public class Match {
         
         // 6. 处理经济，发放金钱
         distributeRoundIncome();
-        
-        // 在发放金钱后，生成商店村民
-        spawnShops();
+
 
         // 7. 为所有玩家添加购买阶段的无敌效果
         int resistanceDuration = ServerConfig.buyPhaseSeconds * 20;
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player != null) {
-                player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, resistanceDuration, 4, false, false, true));
-            }
-        }
+        forEachOnlinePlayer((player, stats) -> player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, resistanceDuration, 4, false, false, true)));
 
         // 8. 广播回合开始的消息
         broadcastToAllPlayersInMatch(Component.literal("第 " + this.currentRound + " 回合开始！购买阶段！"));
         QisCSGO.LOGGER.info("比赛 '{}': 第 {} 回合开始，进入购买阶段。", name, currentRound);
-        
+
         // 9. 最后再给T发放C4
         c4Manager.giveC4ToRandomT();
     }
@@ -266,7 +304,7 @@ public class Match {
         }
         // 在每秒的 tick 中，更新计分板
         if (server.getTickCount() % 20 == 0) {
-            updateScoreboard();
+            scoreboardManager.updateScoreboard();
         }
         if (server.getTickCount() % 5 == 0) {
             updateSpectatorCameras();
@@ -281,25 +319,14 @@ public class Match {
      * @return AABB 区域包围盒，如果没有设置任何点则返回null。
      */
     public AABB getMatchAreaBoundingBox() {
-        List<BlockPos> allPositions = new ArrayList<>();
-        allPositions.addAll(ctSpawns);
-        allPositions.addAll(tSpawns);
-        if (bombsiteA != null) {
-            allPositions.add(BlockPos.containing(bombsiteA.getCenter()));
-        }
-        if (bombsiteB != null) {
-            allPositions.add(BlockPos.containing(bombsiteB.getCenter()));
-        }
+        return this.areaManager.getMatchAreaBoundingBox();
+    }
 
-        if (allPositions.isEmpty()) {
-            return null;
-        }
-
-        AABB boundingBox = new AABB(allPositions.get(0));
-        for (BlockPos pos : allPositions) {
-            boundingBox = boundingBox.minmax(new AABB(pos));
-        }
-        return boundingBox;
+    /**
+     * 【重构】清理比赛区域内所有掉落的物品实体（委托给 areaManager）。
+     */
+    private void clearDroppedItems() {
+        this.areaManager.clearDroppedItems();
     }
 
     /**
@@ -327,6 +354,9 @@ public class Match {
             if (distance > maxDistance) {
                 BlockPos spawnPos = spawns.get(random.nextInt(spawns.size()));
                 player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, player.getYRot(), player.getXRot());
+                // Reset velocity to prevent "moved too quickly" warnings
+                player.setDeltaMovement(0, 0, 0);
+                player.hurtMarked = true;
                 player.sendSystemMessage(Component.literal("购买阶段请不要离开购买区域！").withStyle(ChatFormatting.RED), true);
             }
         }
@@ -349,8 +379,8 @@ public class Match {
             ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
             if (player != null) {
                 String newTeamName = "CT".equals(newTeam) ? getCtTeamName() : getTTeamName();
-                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team leave " + player.getName().getString());
-                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team join " + newTeamName + " " + player.getName().getString());
+                commandExecutor.executeGlobal("team leave " + player.getName().getString());
+                commandExecutor.executeGlobal("team join " + newTeamName + " " + player.getName().getString());
                 performSelectiveClear(player);
                 player.sendSystemMessage(Component.literal("你现在是 " + ("CT".equals(newTeam) ? "反恐精英 (CT)" : "恐怖分子 (T)") + " 队的一员！").withStyle(ChatFormatting.AQUA));
             }
@@ -389,7 +419,9 @@ public class Match {
                     }
                 }
             }
-            
+            // 去重近战，避免重复给予铁剑等近战
+            purgeDuplicateMelee(player);
+
             stats.clearRoundGear();
 
             player.setGameMode(GameType.ADVENTURE);
@@ -409,6 +441,9 @@ public class Match {
             
             BlockPos spawnPos = spawns.get(random.nextInt(spawns.size()));
             player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, player.getYRot(), player.getXRot());
+            // Reset velocity to prevent "moved too quickly" warnings
+            player.setDeltaMovement(0, 0, 0);
+            player.hurtMarked = true;
         }
     }
 
@@ -417,22 +452,24 @@ public class Match {
      * @param player 需要被清空背包的玩家。
      */
     private void performSelectiveClear(ServerPlayer player) {
-        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-            ItemStack stack = player.getInventory().getItem(i);
-            if (stack.isEmpty()) continue;
+        this.playerService.performSelectiveClear(player);
+    }
 
-            boolean isProtected = false;
-            for (String protectedItemString : ServerConfig.inventoryProtectedItems) {
-                if (ItemNBTHelper.idMatches(stack, protectedItemString)) {
-                    isProtected = true;
-                    break;
+    // 去重近战：只保留第一把铁剑，其余清除
+    private void purgeDuplicateMelee(ServerPlayer player) {
+        int kept = 0;
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack s = player.getInventory().getItem(i);
+            if (s.isEmpty()) continue;
+            if (s.getItem() == net.minecraft.world.item.Items.IRON_SWORD) {
+                if (kept == 0) {
+                    kept = 1; // 保留第一把
+                } else {
+                    player.getInventory().setItem(i, ItemStack.EMPTY); // 清除多余
                 }
             }
-
-            if (!isProtected) {
-                player.getInventory().setItem(i, ItemStack.EMPTY);
-            }
         }
+        player.getInventory().setChanged();
     }
 
     /**
@@ -441,63 +478,8 @@ public class Match {
      * @param team 玩家所属队伍。
      */
     private void giveInitialGear(ServerPlayer player, String team) {
-        List<String> gearList = "CT".equals(team) ? ServerConfig.ctPistolRoundGear : ServerConfig.tPistolRoundGear;
-        for (String itemId : gearList) {
-            String command = "give " + player.getName().getString() + " " + itemId;
-            player.server.getCommands().performPrefixedCommand(player.server.createCommandSourceStack(), command);
-        }
-    }
-    /**
-     * 在购买阶段生成商店村民。
-     */
-    private void spawnShops() {
-        removeShops();
-        int duration = ServerConfig.buyPhaseSeconds * 20;
-        Random random = new Random();
-
-        // CT 商店生成逻辑
-        if (ctShopPos != null) {
-            int ctShops = Math.max(1, (int) Math.ceil(getCtCount()));
-            for (int i = 0; i < ctShops; i++) {
-                double offsetX = random.nextDouble() - 0.5;
-                double offsetZ = random.nextDouble() - 0.5;
-                double spawnX = ctShopPos.getX() + 0.5 + offsetX;
-                double spawnY = ctShopPos.getY();
-                double spawnZ = ctShopPos.getZ() + 0.5 + offsetZ;
-
-                String command = String.format(Locale.US, "summon villager %.2f %.2f %.2f %s", 
-                                             spawnX, spawnY, spawnZ, ShopManager.getCtVillagerNbt(duration));
-                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
-            }
-        } else {
-            QisCSGO.LOGGER.warn("比赛 '{}': 尝试生成商店失败，因为CT商店位置未设置。", this.name);
-        }
-
-        // T 商店生成逻辑
-        if (tShopPos != null) {
-            int tShops = Math.max(1, (int) Math.ceil(getTCount()));
-            for (int i = 0; i < tShops; i++) {
-                double offsetX = random.nextDouble() - 0.5;
-                double offsetZ = random.nextDouble() - 0.5;
-                double spawnX = tShopPos.getX() + 0.5 + offsetX;
-                double spawnY = tShopPos.getY();
-                double spawnZ = tShopPos.getZ() + 0.5 + offsetZ;
-                
-                String command = String.format(Locale.US, "summon villager %.2f %.2f %.2f %s", 
-                                             spawnX, spawnY, spawnZ, ShopManager.getTVillagerNbt(duration));
-                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
-            }
-        } else {
-            QisCSGO.LOGGER.warn("比赛 '{}': 尝试生成商店失败，因为T商店位置未设置。", this.name);
-        }
-    }
-
-    /**
-     * 移除商店村民。
-     */
-    private void removeShops() {
-        if (ctShopPos != null) server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill @e[type=minecraft:villager,distance=..2,x=" + ctShopPos.getX() + ",y=" + ctShopPos.getY() + ",z=" + ctShopPos.getZ() + "]");
-        if (tShopPos != null) server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "kill @e[type=minecraft:villager,distance=..2,x=" + tShopPos.getX() + ",y=" + tShopPos.getY() + ",z=" + tShopPos.getZ() + "]");
+        // 使用已注入的 commandExecutor，通过 MatchPlayerHelper 发放装备
+        this.playerService.giveInitialGear(player, team);
     }
 
     /**
@@ -523,128 +505,65 @@ public class Match {
                 BlockPos spawnPos = spawns.get(random.nextInt(spawns.size()));
                 player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, player.getYRot(), player.getXRot());
             }
+            // 切换为生存模式并移除购买阶段的无敌效果，确保击杀判定正常
+            player.setGameMode(GameType.SURVIVAL);
+            player.removeEffect(MobEffects.DAMAGE_RESISTANCE);
         }
         
         recordAllPlayerGear();
         
         broadcastToAllPlayersInMatch(Component.literal("战斗开始！"));
         QisCSGO.LOGGER.info("比赛 '{}': 进入战斗阶段。", name);
-        removeShops();
     }
 
     /**
      * 记录所有玩家在战斗阶段开始时的装备，用于胜利后保留装备。
      */
     private void recordAllPlayerGear() {
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player == null) continue;
-            
-            PlayerStats stats = playerStats.get(playerUUID);
-            if (stats == null) continue;
-
-            List<ItemStack> currentGear = new ArrayList<>();
-            for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-                ItemStack stack = player.getInventory().getItem(i);
-                if (stack.isEmpty()) continue;
-                
-                boolean isProtected = ServerConfig.inventoryProtectedItems.stream()
-                                        .anyMatch(id -> ItemNBTHelper.idMatches(stack, id));
-                boolean isC4 = stack.getItem() == QisCSGO.C4_ITEM.get();
-
-                if (!isProtected && !isC4) {
-                    currentGear.add(stack.copy());
-                }
-            }
-            stats.setRoundGear(currentGear);
-        }
+        forEachOnlinePlayer((player, stats) -> stats.setRoundGear(this.playerService.capturePlayerGear(player)));
     }
 
-    /**
-     * 结束当前回合的逻辑。
-     * @param winningTeam 获胜的队伍 ("CT" 或 "T")。
-     * @param reason 获胜的原因。
-     */
-    public void endRound(String winningTeam, String reason) {
-        if (this.roundState == RoundState.ROUND_END) return;
-        this.roundState = RoundState.ROUND_END;
-        this.lastRoundWinner = winningTeam;
-        
-        this.roundSurvivors.clear();
-        this.roundSurvivors.addAll(this.alivePlayers);
-        
-        if (winningTeam.equals("CT")) {
-            ctScore++;
-            broadcastToAllPlayersInMatch(Component.literal("CT方 胜利！ (" + reason + ")"));
-            playerStats.values().stream().filter(s -> "CT".equals(s.getTeam())).forEach(PlayerStats::resetConsecutiveLosses);
-            playerStats.values().stream().filter(s -> "T".equals(s.getTeam())).forEach(PlayerStats::incrementConsecutiveLosses);
-        } else {
-            tScore++;
-            broadcastToAllPlayersInMatch(Component.literal("T方 胜利！ (" + reason + ")"));
-            playerStats.values().stream().filter(s -> "T".equals(s.getTeam())).forEach(PlayerStats::resetConsecutiveLosses);
-            playerStats.values().stream().filter(s -> "CT".equals(s.getTeam())).forEach(PlayerStats::incrementConsecutiveLosses);
-        }
-        
-        QisCSGO.LOGGER.info("比赛 '{}': 第 {} 回合结束, {}方胜利. 比分 CT {}:{} T", name, currentRound, winningTeam, ctScore, tScore);
-
-        int roundsToWin = (this.totalRounds / 2) + 1;
-        if (ctScore >= roundsToWin || tScore >= roundsToWin) {
-            finishMatch(ctScore > tScore ? "CT" : "T");
-        } else if (currentRound >= totalRounds) {
-            if (ctScore == tScore) {
-                handleTie();
-            } else {
-                finishMatch(ctScore > tScore ? "CT" : "T");
-            }
-        } else {
-            this.tickCounter = ServerConfig.roundEndSeconds * 20;
-        }
-    }
-    
     /**
      * 在回合开始时为玩家发放收入。
      */
     private void distributeRoundIncome() {
-        boolean isPistolRound = (currentRound == 1 || currentRound == (totalRounds / 2) + 1);
-        
-        for (Map.Entry<UUID, PlayerStats> entry : playerStats.entrySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
-            PlayerStats stats = entry.getValue();
-            if (player == null) continue;
+         boolean isPistolRound = (currentRound == 1 || currentRound == (totalRounds / 2) + 1);
 
+         forEachOnlinePlayer((player, stats) -> {
             if (isPistolRound) {
-                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "clear " + player.getName().getString() + " minecraft:diamond");
-                EconomyManager.giveMoney(player, ServerConfig.pistolRoundStartingMoney);
-                player.sendSystemMessage(Component.literal("手枪局！起始资金: " + ServerConfig.pistolRoundStartingMoney + " diamonds.").withStyle(ChatFormatting.AQUA));
+                // 【改用虚拟货币】手枪局设置起始资金
+                if (this.economyService != null) this.economyService.giveMoney(player, ServerConfig.pistolRoundStartingMoney);
+                else EconomyManager.setMoney(player, ServerConfig.pistolRoundStartingMoney);
+                player.sendSystemMessage(Component.literal("§6手枪局！起始资金: §e$" + ServerConfig.pistolRoundStartingMoney).withStyle(ChatFormatting.AQUA));
             } else {
                 boolean wasWinner = stats.getTeam().equals(this.lastRoundWinner);
                 int income;
                 if (wasWinner) {
                     income = ServerConfig.winReward;
-                    player.sendSystemMessage(Component.literal("回合胜利！获得 " + income + " diamonds.").withStyle(ChatFormatting.GREEN));
+                    player.sendSystemMessage(Component.literal("§a回合胜利！获得 §e$" + income).withStyle(ChatFormatting.GREEN));
                 } else {
                     int lossBonus = Math.min(stats.getConsecutiveLosses() * ServerConfig.lossStreakBonus, ServerConfig.maxLossStreakBonus);
                     income = ServerConfig.lossReward + lossBonus;
-                    player.sendSystemMessage(Component.literal("回合失败。获得 " + income + " diamonds (含连败奖励).").withStyle(ChatFormatting.RED));
+                    player.sendSystemMessage(Component.literal("§c回合失败。获得 §e$" + income + " §7(含连败奖励)").withStyle(ChatFormatting.RED));
                 }
-                EconomyManager.giveMoney(player, income);
+                if (this.economyService != null) this.economyService.giveMoney(player, income);
+                else EconomyManager.giveMoney(player, income);
             }
-        }
-    }
+        });
+     }
 
     /**
      * 根据击杀数（主要）和死亡数（次要，越少越好）获取指定队伍的顶尖玩家列表。
      * @param team 要查找的队伍 ("CT" 或 "T")。
-     * @param limit 返回的玩家数量上限。
      * @return 包含玩家UUID和其统计数据的有序列表。
      */
-    private List<Map.Entry<UUID, PlayerStats>> getRankedPlayers(String team, int limit) {
+    private List<Map.Entry<UUID, PlayerStats>> getRankedPlayers(String team) {
         return playerStats.entrySet().stream()
             .filter(entry -> team.equals(entry.getValue().getTeam()))
             .sorted(Comparator.comparingInt((Map.Entry<UUID, PlayerStats> e) -> e.getValue().getKills())
                           .reversed()
                           .thenComparingInt(e -> e.getValue().getDeaths()))
-            .limit(limit)
+            .limit(3)
             .toList();
     }
     
@@ -656,8 +575,8 @@ public class Match {
         final String COLUMN_SPACER = "           ";
         final int NAME_PADDING = 12;
 
-        List<Map.Entry<UUID, PlayerStats>> topCtPlayers = getRankedPlayers("CT", 3);
-        List<Map.Entry<UUID, PlayerStats>> topTPlayers = getRankedPlayers("T", 3);
+        List<Map.Entry<UUID, PlayerStats>> topCtPlayers = getRankedPlayers("CT");
+        List<Map.Entry<UUID, PlayerStats>> topTPlayers = getRankedPlayers("T");
 
         broadcastToAllPlayersInMatch(Component.literal(""));
         broadcastToAllPlayersInMatch(Component.literal(SEPARATOR).withStyle(ChatFormatting.GOLD));
@@ -714,26 +633,23 @@ public class Match {
     private void resetAndTeleportPlayers() {
         BlockPos spawnPos = server.overworld().getSharedSpawnPos();
 
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player != null) {
-                player.setGameMode(GameType.SURVIVAL);
-                player.removeAllEffects();
-                setPlayerKnockbackResistance(player, 0.0);
-                player.getInventory().clearContent();
-                player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 0, 0);
-            }
-        }
-    }
+        forEachOnlinePlayer((player, stats) -> {
+            player.setGameMode(GameType.SURVIVAL);
+            player.removeAllEffects();
+            setPlayerKnockbackResistance(player, 0.0);
+            player.getInventory().clearContent();
+            player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 0, 0);
+        });
+     }
 
     /**
      * 清理所有与本场比赛相关的服务器数据，如队伍和比赛实例。
      */
     private void cleanupMatchData() {
-        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team remove " + ctTeamName);
-        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "team remove " + tTeamName);
+        commandExecutor.executeGlobal("team remove " + ctTeamName);
+        commandExecutor.executeGlobal("team remove " + tTeamName);
 
-        MatchManager.removeMatch(this.name);
+        com.qisumei.csgo.service.ServiceFallbacks.removeMatch(this.name);
         
         QisCSGO.LOGGER.info("比赛 '{}' 的数据已清理。", this.name);
     }
@@ -742,17 +658,16 @@ public class Match {
      * 结束整场比赛。
      * @param winningTeam 最终获胜的队伍。
      */
+    @SuppressWarnings("unused")
     private void finishMatch(String winningTeam) {
         this.state = MatchState.FINISHED;
         Component winner = Component.literal(winningTeam).withStyle(winningTeam.equals("CT") ? ChatFormatting.BLUE : ChatFormatting.GOLD);
         broadcastToAllPlayersInMatch(Component.literal("比赛结束！胜利者是 ").append(winner).append("!"));
         QisCSGO.LOGGER.info("比赛 '{}' 结束, {}方胜利.", name, winningTeam);
         broadcastEndGameStats();
-        removeScoreboard();
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            setPlayerKnockbackResistance(player, 0.0);
-        }
+        scoreboardManager.removeScoreboard();
+        forEachOnlinePlayer((player, stats) -> setPlayerKnockbackResistance(player, 0.0));
+        this.bossBar.removeAllPlayers();
         resetAndTeleportPlayers();
         cleanupMatchData();
     }
@@ -765,11 +680,9 @@ public class Match {
         broadcastToAllPlayersInMatch(Component.literal("比赛平局！"));
         QisCSGO.LOGGER.info("比赛 '{}' 结束, 平局.", name);
         broadcastEndGameStats();
-        removeScoreboard();
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            setPlayerKnockbackResistance(player, 0.0);
-        }
+        scoreboardManager.removeScoreboard();
+        forEachOnlinePlayer((player, stats) -> setPlayerKnockbackResistance(player, 0.0));
+
         this.bossBar.removeAllPlayers();
         resetAndTeleportPlayers();
         cleanupMatchData();
@@ -782,6 +695,13 @@ public class Match {
     public void markPlayerAsDead(ServerPlayer deadPlayer) {
         if (!this.alivePlayers.contains(deadPlayer.getUUID())) return;
         
+        // 死亡时清空头盔与胸甲
+        try {
+            deadPlayer.setItemSlot(EquipmentSlot.HEAD, ItemStack.EMPTY);
+            deadPlayer.setItemSlot(EquipmentSlot.CHEST, ItemStack.EMPTY);
+            deadPlayer.getInventory().setChanged();
+        } catch (Exception ignored) {}
+
         this.lastTeammateDeathPos.put(getPlayerStats().get(deadPlayer.getUUID()).getTeam(), deadPlayer.blockPosition());
         
         this.alivePlayers.remove(deadPlayer.getUUID());
@@ -833,16 +753,14 @@ public class Match {
      * 更新所有观察者的视角目标
      */
     public void updateSpectatorCameras() {
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            
+        forEachOnlinePlayer((player, stats) -> {
             if (player != null && player.isSpectator()) {
                 if (player.getCamera() == player) {
                     findAndSetSpectatorTarget(player);
                 }
             }
-        }
-    }
+        });
+     }
 
     /**
      * 为指定的观察者寻找并设置一个新的观战目标。
@@ -859,7 +777,7 @@ public class Match {
         List<ServerPlayer> aliveTeammates = alivePlayers.stream()
             .map(uuid -> server.getPlayerList().getPlayer(uuid))
             .filter(p -> p != null && team.equals(getPlayerStats().get(p.getUUID()).getTeam()))
-            .collect(Collectors.toList());
+            .toList();
 
         if (!aliveTeammates.isEmpty()) {
             ServerPlayer target = aliveTeammates.get(new Random().nextInt(aliveTeammates.size()));
@@ -911,20 +829,39 @@ public class Match {
             return stats != null && "T".equals(stats.getTeam()) && p != null && p.gameMode.getGameModeForPlayer() == GameType.SURVIVAL;
         }).count();
 
+        // 【调试日志】记录当前存活情况
+        QisCSGO.LOGGER.debug("比赛 '{}' 第{}回合检查结束条件: CT存活={}, T存活={}, C4已安放={}",
+            name, currentRound, aliveCtCount, aliveTCount, c4Manager.isC4Planted());
+
         // 如果C4已经安放，胜利逻辑会改变
         if (c4Manager.isC4Planted()) {
             // C4安放后，如果所有CT都阵亡了，T方立即获胜
-            if (aliveCtCount == 0) {
+            if (aliveCtCount == 0 && aliveTCount > 0) {
+                QisCSGO.LOGGER.info("比赛 '{}' 第{}回合: CT全灭，C4已安放，T方获胜", name, currentRound);
                 endRound("T", "所有CT玩家阵亡");
             }
+            // 如果CT和T同时全灭（理论上不应该发生，但做防御性检查）
+            else if (aliveCtCount == 0 && aliveTCount == 0) {
+                QisCSGO.LOGGER.warn("比赛 '{}' 第{}回合: 双方同时全灭，C4已安放，T方获胜", name, currentRound);
+                endRound("T", "双方同时阵亡，C4已安放");
+            }
         } else {
-            // 如果所有T都阵亡了，CT方获胜
-            if (aliveTCount == 0) {
+            // C4未安放的情况
+            // 【修复】检查T方是否全灭（优先判断，因为没有C4的T方更容易输）
+            if (aliveTCount == 0 && aliveCtCount > 0) {
+                QisCSGO.LOGGER.info("比赛 '{}' 第{}回合: T全灭，CT方获胜", name, currentRound);
                 endRound("CT", "所有T玩家阵亡");
-            } 
-            // 如果所有CT都阵亡了，T方获胜
-            else if (aliveCtCount == 0) {
+            }
+            // 检查CT方是否全灭
+            else if (aliveCtCount == 0 && aliveTCount > 0) {
+                QisCSGO.LOGGER.info("比赛 '{}' 第{}回合: CT全灭，T方获胜", name, currentRound);
                 endRound("T", "所有CT玩家阵亡");
+            }
+            // 双方同时全灭（极少发生的边界情况）
+            // 在没有C4的情况下，双方同时全灭则CT方获胜（因为T方需要完成安放C4的目标）
+            else if (aliveCtCount == 0 && aliveTCount == 0) {
+                QisCSGO.LOGGER.warn("比赛 '{}' 第{}回合: 双方同时全灭，CT方获胜（T方未完成目标）", name, currentRound);
+                endRound("CT", "双方同时阵亡");
             }
         }
     }
@@ -945,7 +882,6 @@ public class Match {
         }
     }
 
-    // --- C4 逻辑委托 ---
 
     /**
      * 当C4被安放时，由C4Item调用此方法，再由Match委托给C4Manager处理
@@ -954,16 +890,12 @@ public class Match {
     public void onC4Planted(BlockPos pos) {
         c4Manager.onC4Planted(pos);
     }
-    
-    /**
-     * 当C4被安放后，C4Manager会调用此方法来更新Match的回合计时器
-     */
-    
+
     /**
      * 获取C4管理器实例
      * @return C4Manager实例
      */
-    public C4Manager getC4Manager() {
+    public C4Controller getC4Manager() {
         return this.c4Manager;
     }
 
@@ -972,187 +904,29 @@ public class Match {
      * @param message 要广播的消息组件。
      */
     public void broadcastToAllPlayersInMatch(Component message) {
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player != null) {
-                player.sendSystemMessage(message, false);
-            }
-        }
+        forEachOnlinePlayer((player, stats) -> player.sendSystemMessage(message, false));
     }
     
     /**
      * 由管理员强制结束比赛。
      */
-    public void forceEnd() {
-        this.state = MatchState.FINISHED;
-        broadcastToAllPlayersInMatch(Component.literal("比赛已被管理员强制结束。"));
-        c4Manager.reset();
-        removeShops();
-        removeScoreboard();
-        this.bossBar.removeAllPlayers();
+     public void forceEnd() {
+         this.state = MatchState.FINISHED;
+         broadcastToAllPlayersInMatch(Component.literal("比赛已被管理员强制结束。"));
+         c4Manager.reset();
+         scoreboardManager.removeScoreboard();
+         this.bossBar.removeAllPlayers();
 
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player != null) {
-                player.setGameMode(server.getDefaultGameType());
-                setPlayerKnockbackResistance(player, 0.0);
-                player.removeAllEffects();
-            }
-        }
-        resetAndTeleportPlayers();
-        cleanupMatchData();
-    }
+         forEachOnlinePlayer((player, stats) -> {
+             player.setGameMode(server.getDefaultGameType());
+             setPlayerKnockbackResistance(player, 0.0);
+             player.removeAllEffects();
+         });
+         resetAndTeleportPlayers();
+         cleanupMatchData();
+     }
 
-    /**
-     * 创建比赛计分板。
-     */
-    private void setupScoreboard() {
-        this.scoreboard = server.getScoreboard();
-        String safeMatchName = name.replaceAll("[^a-zA-Z0-9_.-]", "");
-        String objectiveName = "kda_" + safeMatchName.substring(0, Math.min(safeMatchName.length(), 12));
-        
-        Objective oldObjective = this.scoreboard.getObjective(objectiveName);
-        if (oldObjective != null) {
-            this.scoreboard.removeObjective(oldObjective);
-        }
 
-        this.objective = this.scoreboard.addObjective(
-            objectiveName, 
-            ObjectiveCriteria.DUMMY, 
-            Component.literal("比赛排名").withStyle(ChatFormatting.YELLOW), 
-            ObjectiveCriteria.RenderType.INTEGER, 
-            true, 
-            null
-        );
-        this.scoreboard.setDisplayObjective(DisplaySlot.SIDEBAR, this.objective);
-    }
-
-    /**
-     * 每秒更新计分板上的玩家分数。
-     */
-    private void updateScoreboard() {
-        if (this.objective == null || this.scoreboard == null) return;
-
-        scoreboardRebuildCounter++;
-        if (scoreboardRebuildCounter >= 200) { 
-            rebuildScoreboard();
-            scoreboardRebuildCounter = 0;
-            return;
-        }
-
-        List<Map.Entry<UUID, PlayerStats>> sortedPlayers = playerStats.entrySet().stream()
-            .sorted(Comparator.comparingInt((Map.Entry<UUID, PlayerStats> e) -> e.getValue().getKills()).reversed()
-            .thenComparingInt(e -> e.getValue().getDeaths()))
-            .limit(15)
-            .toList();
-
-        for (Map.Entry<UUID, PlayerStats> entry : sortedPlayers) {
-            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
-            if (player != null) {
-                this.scoreboard.getOrCreatePlayerScore(player, this.objective).set(entry.getValue().getKills());
-            }
-        }
-    }
-
-    /**
-     * 定期重建计分板以移除已离开玩家的条目。
-     */
-    private void rebuildScoreboard() {
-        if (this.objective == null || this.scoreboard == null) return;
-        
-        String objectiveName = this.objective.getName();
-        Component displayName = this.objective.getDisplayName();
-        
-        this.scoreboard.removeObjective(this.objective);
-        
-        this.objective = this.scoreboard.addObjective(
-            objectiveName, 
-            ObjectiveCriteria.DUMMY, 
-            displayName, 
-            ObjectiveCriteria.RenderType.INTEGER, 
-            true, 
-            null
-        );
-        this.scoreboard.setDisplayObjective(DisplaySlot.SIDEBAR, this.objective);
-        
-        QisCSGO.LOGGER.debug("重建计分板: {}", objectiveName);
-    }
-
-    /**
-     * 在比赛结束时移除计分板。
-     */
-    private void removeScoreboard() {
-        if (this.scoreboard != null && this.objective != null) {
-            this.scoreboard.setDisplayObjective(DisplaySlot.SIDEBAR, null);
-            Objective currentObjective = this.scoreboard.getObjective(this.objective.getName());
-            if (currentObjective != null) {
-                this.scoreboard.removeObjective(currentObjective);
-            }
-            this.objective = null;
-        }
-    }
-
-    /**
-     * 清理比赛区域内所有掉落的物品实体。
-     */
-    private void clearDroppedItems() {
-        List<BlockPos> allPositions = new ArrayList<>();
-        allPositions.addAll(ctSpawns);
-        allPositions.addAll(tSpawns);
-        if (bombsiteA != null) {
-            allPositions.add(BlockPos.containing(bombsiteA.minX, bombsiteA.minY, bombsiteA.minZ));
-            allPositions.add(BlockPos.containing(bombsiteA.maxX, bombsiteA.maxY, bombsiteA.maxZ));
-        }
-        if (bombsiteB != null) {
-            allPositions.add(BlockPos.containing(bombsiteB.minX, bombsiteB.minY, bombsiteB.minZ));
-            allPositions.add(BlockPos.containing(bombsiteB.maxX, bombsiteB.maxY, bombsiteB.maxZ));
-        }
-
-        if (allPositions.isEmpty()) {
-            return;
-        }
-
-        double minX = allPositions.getFirst().getX();
-        double minY = allPositions.getFirst().getY();
-        double minZ = allPositions.getFirst().getZ();
-        
-        double maxX = minX;
-        double maxY = minY;
-        double maxZ = minZ;
-
-        for (BlockPos pos : allPositions) {
-            minX = Math.min(minX, pos.getX());
-            minY = Math.min(minY, pos.getY());
-            minZ = Math.min(minZ, pos.getZ());
-            maxX = Math.max(maxX, pos.getX());
-            maxY = Math.max(maxY, pos.getY());
-            maxZ = Math.max(maxZ, pos.getZ());
-        }
-
-        AABB matchArea = new AABB(minX - 50, minY - 20, minZ - 50, maxX + 50, maxY + 20, maxZ + 50);
-
-        List<ItemEntity> itemsToRemove = server.overworld().getEntitiesOfClass(ItemEntity.class, matchArea, (entity) -> true);
-
-        for (ItemEntity itemEntity : itemsToRemove) {
-            itemEntity.discard();
-        }
-
-        QisCSGO.LOGGER.info("比赛 '{}': 清理了 {} 个掉落物品。", this.name, itemsToRemove.size());
-    }
-
-    /**
-     * 为指定玩家重新应用计分板。
-     * @param player 需要接收计分板信息的玩家。
-     */
-    public void reapplyScoreboardToPlayer(ServerPlayer player) {
-        if (this.scoreboard != null && this.objective != null) {
-            this.scoreboard.setDisplayObjective(DisplaySlot.SIDEBAR, this.objective);
-            PlayerStats stats = this.playerStats.get(player.getUUID());
-            int currentKills = (stats != null) ? stats.getKills() : 0;
-            this.scoreboard.getOrCreatePlayerScore(player, this.objective).set(currentKills);
-        }
-    }
-    
     /**
      * 更新Boss栏的显示内容和进度。
      */
@@ -1201,6 +975,7 @@ public class Match {
     
     public String getName() { return name; }
     public MatchState getState() { return state; }
+    @SuppressWarnings("unused")
     public int getMaxPlayers() { return maxPlayers; }
     public int getPlayerCount() { return playerStats.size(); }
     public String getCtTeamName() { return ctTeamName; }
@@ -1257,7 +1032,7 @@ public class Match {
      */
     public void addPlayer(ServerPlayer player, String team) { 
         playerStats.put(player.getUUID(), new PlayerStats(team)); 
-        reapplyScoreboardToPlayer(player);
+        scoreboardManager.reapplyToPlayer(player);
         this.bossBar.addPlayer(player);
         setPlayerKnockbackResistance(player, 1000.0);
     }
@@ -1316,7 +1091,7 @@ public class Match {
     private void setPlayerKnockbackResistance(ServerPlayer player, double amount) {
         if (player != null) {
             String command = "attribute " + player.getName().getString() + " minecraft:generic.knockback_resistance base set " + amount;
-            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
+            commandExecutor.executeGlobal(command);
         }
     }
     
@@ -1327,4 +1102,99 @@ public class Match {
     public Set<UUID> getAlivePlayers() {
         return this.alivePlayers;
     }
+
+    /**
+     * 重新给单个玩家应用计分板（对外桥接方法，委托给 MatchScoreboardManager）。
+     * @param player 目标玩家
+     */
+    public void reapplyScoreboardToPlayer(ServerPlayer player) {
+        if (this.scoreboardManager != null) this.scoreboardManager.reapplyToPlayer(player);
+    }
+
+    /**
+     * 遍历所有已登记并且在线的玩家，将 ServerPlayer 和 对应的 PlayerStats 传给 action。
+     */
+    private void forEachOnlinePlayer(BiConsumer<ServerPlayer, PlayerStats> action) {
+        for (UUID playerUUID : playerStats.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+            if (player == null) continue;
+            PlayerStats stats = playerStats.get(playerUUID);
+            if (stats == null) continue;
+            action.accept(player, stats);
+        }
+    }
+
+    /**
+     * 结束当前回合的逻辑。
+     * @param winningTeam 获胜的队伍 ("CT" 或 "T")。
+     * @param reason 获胜的原因。
+     */
+    @Override
+    public void endRound(String winningTeam, String reason) {
+         if (this.roundState == RoundState.ROUND_END) return;
+         this.roundState = RoundState.ROUND_END;
+         this.lastRoundWinner = winningTeam;
+
+         // 结算比分
+         if ("CT".equals(winningTeam)) {
+             this.ctScore++;
+         } else {
+             this.tScore++;
+         }
+
+         // 记录本回合幸存者，供下回合发放装备时使用
+         this.roundSurvivors.clear();
+         this.roundSurvivors.addAll(this.alivePlayers);
+
+         // 记录连胜/连败
+         for (UUID playerUUID : playerStats.keySet()) {
+             PlayerStats stats = playerStats.get(playerUUID);
+             if (stats != null) {
+                 if (stats.getTeam().equals(winningTeam)) {
+                     stats.resetConsecutiveLosses();
+                 } else {
+                     stats.incrementConsecutiveLosses();
+                 }
+             }
+         }
+         
+         // 给获胜方玩家奖励
+         forEachOnlinePlayer((player, stats) -> {
+             if (stats.getTeam().equals(winningTeam)) {
+                 int reward = ServerConfig.winReward;
+                 if (economyService != null) {
+                     economyService.giveMoney(player, reward);
+                 } else {
+                     EconomyManager.giveMoney(player, reward);
+                 }
+                 player.sendSystemMessage(Component.literal("你们赢得了本回合！获得奖励：" + reward + " 货币").withStyle(ChatFormatting.GREEN));
+             }
+         });
+
+         // 更新统计信息面板
+         scoreboardManager.updateScoreboard();
+         
+         // 广播回合结束信息（包含原因）
+         String message = String.format("第 %d 回合结束！%s 获胜！原因：%s",
+             currentRound,
+             winningTeam.equals("CT") ? "反恐精英 (CT)" : "恐怖分子 (T)",
+             reason);
+         broadcastToAllPlayersInMatch(Component.literal(message).withStyle(ChatFormatting.YELLOW));
+
+         // 检查是否打满回合，决定结束比赛还是进入下一回合
+         if (currentRound >= totalRounds) {
+             // 比赛打满了，根据比分决定胜负或平局
+             if (ctScore == tScore) {
+                 handleTie();
+             } else {
+                 String overallWinner = (ctScore > tScore) ? "CT" : "T";
+                 finishMatch(overallWinner);
+             }
+             return; // 比赛已结束，不设置下一回合倒计时
+         }
+
+         // 设置回合结束展示时间，随后自动开始下一回合
+         this.tickCounter = ServerConfig.roundEndSeconds * 20;
+     }
 }
+

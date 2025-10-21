@@ -2,6 +2,7 @@ package com.qisumei.csgo.c4.handler;
 
 import com.qisumei.csgo.c4.C4Manager;
 import com.qisumei.csgo.c4.sound.ModSounds;
+import com.qisumei.csgo.game.MatchContext;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -13,6 +14,7 @@ import net.minecraft.sounds.SoundSource;
  */
 public class C4CountdownHandler {
     private final C4Manager c4Manager;
+    private final MatchContext context;
     private BlockPos c4Pos;
     private int ticksLeft;
     private int nextBeepTick;
@@ -26,6 +28,7 @@ public class C4CountdownHandler {
      */
     public C4CountdownHandler(C4Manager c4Manager) {
         this.c4Manager = c4Manager;
+        this.context = c4Manager.getContext();
     }
 
     /**
@@ -41,7 +44,9 @@ public class C4CountdownHandler {
         this.isActive = true;
 
         // 广播炸弹安放警告
-        c4Manager.getMatch().broadcastToAllPlayersInMatch(Component.literal("§c[警报] 炸弹已安放！"));
+        if (context != null) {
+            context.broadcastToAllPlayersInMatch(Component.literal("§c[警报] 炸弹已安放！"));
+        }
         playBeepSound();
     }
 
@@ -76,7 +81,7 @@ public class C4CountdownHandler {
 
         // 倒计时剩余10秒时广播警告
         if (!announced10 && ticksLeft <= 10 * 20) {
-            c4Manager.getMatch().broadcastToAllPlayersInMatch(Component.literal("§e[警告] 10秒后爆炸！"));
+            if (context != null) context.broadcastToAllPlayersInMatch(Component.literal("§e[警告] 10秒后爆炸！"));
             announced10 = true;
         }
     }
@@ -85,7 +90,7 @@ public class C4CountdownHandler {
      * 播放C4提示音效。
      */
     private void playBeepSound() {
-        MinecraftServer server = c4Manager.getMatch().getServer();
+        MinecraftServer server = (context != null) ? context.getServer() : null;
         if (server == null || c4Pos == null) return;
 
         server.overworld().playSound(null, c4Pos, ModSounds.ALARM_SOUND(), SoundSource.BLOCKS, 2.0f, 1.0f);

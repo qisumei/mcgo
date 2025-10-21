@@ -3,15 +3,18 @@ package com.qisumei.csgo.c4.task;
 import com.qisumei.csgo.QisCSGO;
 import com.qisumei.csgo.c4.C4Manager;
 import com.qisumei.csgo.game.Match;
+import com.qisumei.csgo.game.MatchContext;
 import com.qisumei.csgo.game.PlayerStats;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,12 +25,12 @@ import java.util.UUID;
 public class C4TickTask {
 
     private final C4Manager c4Manager;
-    private final Match match;
+    private final MatchContext context;
     private int c4BroadcastCooldown = 0;
 
     public C4TickTask(C4Manager c4Manager) {
         this.c4Manager = c4Manager;
-        this.match = c4Manager.getMatch();
+        this.context = c4Manager.getContext();
     }
 
     /**
@@ -37,12 +40,22 @@ public class C4TickTask {
         handleDroppedC4Tick();
     }
 
+    // 安全获取 C4 物品实例，若未注册或异常则返回 null
+    private Item getC4ItemOrNull() {
+        try {
+            return QisCSGO.C4_ITEM.get();
+        } catch (Throwable t) {
+            QisCSGO.LOGGER.error("在 C4TickTask 获取 C4_ITEM 时发生异常：", t);
+            return null;
+        }
+    }
+
     /**
      * 在每个玩家 tick 中调用。
      * @param player 当前 tick 的玩家
      */
     public void handlePlayerTick(ServerPlayer player) {
-        PlayerStats stats = match.getPlayerStats().get(player.getUUID());
+        PlayerStats stats = context.getPlayerStats().get(player.getUUID());
         if (stats == null) return;
 
         if ("CT".equals(stats.getTeam())) {
@@ -61,15 +74,16 @@ public class C4TickTask {
                 c4BroadcastCooldown = 20;
                 BlockPos c4DropPos = droppedC4.blockPosition();
                 Component message = Component.literal("C4掉落在: " + c4DropPos.getX() + ", " + c4DropPos.getY() + ", " + c4DropPos.getZ()).withStyle(ChatFormatting.YELLOW);
-                match.broadcastToTeam(message, "T");
+                context.broadcastToTeam(message, "T");
             }
             c4BroadcastCooldown--;
 
-            for (UUID playerUUID : match.getAlivePlayers()) {
-                ServerPlayer player = match.getServer().getPlayerList().getPlayer(playerUUID);
+            // 【修复】创建副本避免并发修改异常（玩家可能在迭代过程中死亡）
+            for (UUID playerUUID : new ArrayList<>(context.getAlivePlayers())) {
+                ServerPlayer player = context.getServer().getPlayerList().getPlayer(playerUUID);
                 if (player == null) continue;
 
-                PlayerStats stats = match.getPlayerStats().get(playerUUID);
+                PlayerStats stats = context.getPlayerStats().get(playerUUID);
                 if (stats != null && "T".equals(stats.getTeam())) {
                     double distance = player.distanceTo(droppedC4);
                     String distanceString = String.format("%.1f", distance);
@@ -83,19 +97,24 @@ public class C4TickTask {
     }
 
     private ItemEntity findDroppedC4() {
-        AABB searchBox = match.getMatchAreaBoundingBox();
+        AABB searchBox = context.getMatchAreaBoundingBox();
         if (searchBox == null) return null;
 
-        List<ItemEntity> items = match.getServer().overworld().getEntitiesOfClass(ItemEntity.class, searchBox.inflate(50.0),
-            item -> item.getItem().is(QisCSGO.C4_ITEM.get()));
+        Item c4Item = getC4ItemOrNull();
+        if (c4Item == null) return null;
+
+        List<ItemEntity> items = context.getServer().overworld().getEntitiesOfClass(ItemEntity.class, searchBox.inflate(50.0),
+            item -> item.getItem().is(c4Item));
 
         return items.isEmpty() ? null : items.get(0);
     }
 
     private void checkForIllegalC4Holder(ServerPlayer player) {
+        Item c4Item = getC4ItemOrNull();
+        if (c4Item == null) return;
         for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
             ItemStack stack = player.getInventory().getItem(i);
-            if (stack.is(QisCSGO.C4_ITEM.get())) {
+            if (stack.is(c4Item)) {
                 ItemStack c4ToDrop = stack.copy();
                 player.getInventory().setItem(i, ItemStack.EMPTY);
                 player.drop(c4ToDrop, false, false);
@@ -107,9 +126,11 @@ public class C4TickTask {
     }
 
     private void handleC4PlantingHint(ServerPlayer player) {
-        boolean holdingC4 = player.getMainHandItem().is(QisCSGO.C4_ITEM.get()) || player.getOffhandItem().is(QisCSGO.C4_ITEM.get());
-        if (holdingC4 && match.getRoundState() == Match.RoundState.IN_PROGRESS && !player.isUsingItem()) {
-            if (match.isPlayerInBombsite(player)) {
+        Item c4Item = getC4ItemOrNull();
+        if (c4Item == null) return;
+        boolean holdingC4 = player.getMainHandItem().is(c4Item) || player.getOffhandItem().is(c4Item);
+        if (holdingC4 && context.getRoundState() == Match.RoundState.IN_PROGRESS && !player.isUsingItem()) {
+            if (context.isPlayerInBombsite(player)) {
                 Component message = Component.literal("你正处于炸弹安放区，可以安放C4！").withStyle(ChatFormatting.GREEN);
                 player.sendSystemMessage(message, true);
             }
