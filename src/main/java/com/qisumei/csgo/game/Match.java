@@ -251,17 +251,19 @@ public class Match {
             tickCounter--;
             if (tickCounter == 0) {
                 if (roundState == RoundState.BUY_PHASE) {
-                    beginRoundInProgress(); // 购买阶段结束，开始战斗
-                } else if (roundState == RoundState.IN_PROGRESS) {
-                    endRound("CT", "时间耗尽"); // 回合时间到，CT胜利
-                } else if (roundState == RoundState.ROUND_END) {
+                    beginRoundInProgress(); // 1. 处理购买阶段结束
+                } 
+                // 2. 处理战斗阶段结束，并加入C4检查
+                else if (roundState == RoundState.IN_PROGRESS && !c4Manager.isC4Planted()) {
+                    endRound("CT", "时间耗尽");
+                } 
+                else if (roundState == RoundState.ROUND_END) {
                     if (this.state == MatchState.IN_PROGRESS) {
-                        startNewRound(); // 回合结束展示时间到，开始新回合
+                        startNewRound(); // 3. 处理回合间歇结束
                     }
                 }
             }
         }
-        
         // 在每秒的 tick 中，更新计分板
         if (server.getTickCount() % 20 == 0) {
             updateScoreboard();
@@ -276,7 +278,6 @@ public class Match {
 
     /**
      * 【新增】计算并返回一个包围了比赛所有关键点的大致区域。
-     * 用于在大范围内搜索实体，如掉落的C4。
      * @return AABB 区域包围盒，如果没有设置任何点则返回null。
      */
     public AABB getMatchAreaBoundingBox() {
@@ -957,10 +958,6 @@ public class Match {
     /**
      * 当C4被安放后，C4Manager会调用此方法来更新Match的回合计时器
      */
-    public void onC4PlantedUpdateMatchTimer(){
-        // C4安放后，回合时间重置为40秒爆炸倒计时
-        this.tickCounter = 40 * 20;
-    }
     
     /**
      * 获取C4管理器实例
@@ -1172,8 +1169,9 @@ public class Match {
             case IN_PROGRESS:
                 if (c4Manager.isC4Planted()) {
                     int c4TotalTicks = 40 * 20;
-                    float c4Progress = (float) this.tickCounter / c4TotalTicks;
-                    this.bossBar.setName(Component.literal("C4即将爆炸: " + (this.tickCounter / 20 + 1) + "s").withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
+                    int c4TicksLeft = c4Manager.getC4TicksLeft();
+                    float c4Progress = (float) c4TicksLeft / c4TotalTicks;
+                    this.bossBar.setName(Component.literal("C4即将爆炸: " + (c4TicksLeft / 20 + 1) + "s").withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
                     this.bossBar.setColor(BossEvent.BossBarColor.RED);
                     this.bossBar.setProgress(c4Progress);
                 } else {

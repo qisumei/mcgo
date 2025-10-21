@@ -192,8 +192,6 @@ public class C4Manager {
 
         Component message = Component.literal("§e[信息] §f炸弹已安放在 §a" + siteName + "！");
         match.broadcastToAllPlayersInMatch(message);
-
-        match.onC4PlantedUpdateMatchTimer();
     }
 
     public void onC4Defused(ServerPlayer defuser) {
@@ -350,5 +348,8 @@ public class C4Manager {
     
     public Match getMatch() {
         return this.match;
+    }
+    public int getC4TicksLeft() {
+        return countdownHandler.getTicksLeft();
     }
 }

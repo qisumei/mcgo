@@ -103,4 +103,12 @@ public class C4CountdownHandler {
         if (progress > 0.6) return 10;
         return Math.max(15, (int)(40 * (1 - progress * 0.7f)));
     }
+
+    /**
+     * 获取C4剩余的倒计时 tick 数。
+     * @return 剩余 tick 数
+     */
+    public int getTicksLeft() {
+        return this.ticksLeft;
+    }
 }
