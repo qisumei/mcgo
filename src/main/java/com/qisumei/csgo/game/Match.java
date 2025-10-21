@@ -1,7 +1,7 @@
 package com.qisumei.csgo.game;
 
 import com.qisumei.csgo.QisCSGO;
-import com.qisumei.csgo.c4.C4Manager; // 新增导入
+import com.qisumei.csgo.c4.C4Manager;
 import com.qisumei.csgo.config.ServerConfig;
 import com.qisumei.csgo.game.preset.MatchPreset;
 import com.qisumei.csgo.util.ItemNBTHelper;
@@ -22,18 +22,12 @@ import net.minecraft.world.scores.DisplaySlot;
 import net.minecraft.world.scores.Objective;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
  * Match类，管理一场CSGO比赛的整个生命周期和所有核心逻辑。
- * 重构后：C4相关逻辑已委托给C4Manager处理。
  */
 public class Match {
 
@@ -62,7 +56,6 @@ public class Match {
     private AABB bombsiteB;
 
     // --- C4 管理 ---
-    // 删除原有的C4相关变量，替换为C4Manager
     private final C4Manager c4Manager;
 
     // --- 回合状态 ---
@@ -111,6 +104,7 @@ public class Match {
         this.alivePlayers = new HashSet<>();
         this.lastRoundWinner = "";
         this.roundSurvivors = new HashSet<>();
+        
         
         // 初始化 C4Manager，将自身引用传入
         this.c4Manager = new C4Manager(this);
@@ -179,7 +173,7 @@ public class Match {
         // 1. 清理战场上的掉落物
         clearDroppedItems();
         
-        // 2. 推进回合数并重置C4状态（通过C4Manager）
+        // 2. 推进回合数并重置C4状态
         this.currentRound++;
         c4Manager.reset();
 
@@ -235,7 +229,7 @@ public class Match {
         QisCSGO.LOGGER.info("比赛 '{}': 第 {} 回合开始，进入购买阶段。", name, currentRound);
         
         // 9. 最后再给T发放C4
-        giveC4ToRandomT();
+        c4Manager.giveC4ToRandomT();
     }
 
     /**
@@ -244,7 +238,7 @@ public class Match {
     public void tick() {
         if (state != MatchState.IN_PROGRESS) return;
         
-        // 更新C4管理器（替代原来的C4倒计时器）
+        // 更新C4管理器
         c4Manager.tick();
 
         // 购买阶段区域限制逻辑
@@ -452,24 +446,6 @@ public class Match {
             player.server.getCommands().performPrefixedCommand(player.server.createCommandSourceStack(), command);
         }
     }
-
-    /**
-     * 从T阵营中随机挑选一名玩家给予C4。
-     */
-    private void giveC4ToRandomT() {
-        List<ServerPlayer> tPlayers = playerStats.entrySet().stream()
-            .filter(e -> "T".equals(e.getValue().getTeam()))
-            .map(e -> server.getPlayerList().getPlayer(e.getKey()))
-            .filter(Objects::nonNull)
-            .toList(); 
-
-        if (!tPlayers.isEmpty()) {
-            ServerPlayer playerWithC4 = tPlayers.get(new Random().nextInt(tPlayers.size()));
-            playerWithC4.getInventory().add(new ItemStack(QisCSGO.C4_ITEM.get()));
-            playerWithC4.sendSystemMessage(Component.literal("§e你携带了C4炸弹！").withStyle(ChatFormatting.BOLD));
-        }
-    }
-    
     /**
      * 在购买阶段生成商店村民。
      */
@@ -985,55 +961,6 @@ public class Match {
         // C4安放后，回合时间重置为40秒爆炸倒计时
         this.tickCounter = 40 * 20;
     }
-
-    /**
-     * 应用自定义的C4爆炸伤害，使用 genericKill 伤害源以避免任何爆炸相关的副作用。
-     */
-    public void applyCustomExplosionDamage(BlockPos explosionPos) {
-        final double explosionRadius = 16.0;
-        final float maxDamage = 100.0f;
-
-        double explosionX = explosionPos.getX() + 0.5;
-        double explosionY = explosionPos.getY() + 0.5;
-        double explosionZ = explosionPos.getZ() + 0.5;
-
-        DamageSource damageSource = server.overworld().damageSources().genericKill();
-
-        for (UUID playerUUID : alivePlayers) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player == null) continue;
-
-            double distanceSq = player.distanceToSqr(explosionX, explosionY, explosionZ);
-
-            if (distanceSq < explosionRadius * explosionRadius) {
-                double distance = Math.sqrt(distanceSq);
-                float damageFalloff = (float) (1.0 - distance / explosionRadius);
-                float damageToApply = maxDamage * damageFalloff;
-
-                if (damageToApply > 0) {
-                    player.hurt(damageSource, damageToApply);
-                }
-            }
-        }
-        
-        // 播放爆炸效果
-        server.overworld().playSound(
-                null,
-                explosionPos,
-                SoundEvents.GENERIC_EXPLODE.value(),
-                SoundSource.BLOCKS,
-                4.0F,
-                (1.0F + (server.overworld().random.nextFloat() - server.overworld().random.nextFloat()) * 0.2F) * 0.7F
-        );
-
-        server.overworld().sendParticles(
-                ParticleTypes.EXPLOSION_EMITTER,
-                explosionX, explosionY, explosionZ,
-                2,
-                1.0, 1.0, 1.0,
-                0.0
-        );
-    }
     
     /**
      * 获取C4管理器实例
@@ -1062,6 +989,7 @@ public class Match {
     public void forceEnd() {
         this.state = MatchState.FINISHED;
         broadcastToAllPlayersInMatch(Component.literal("比赛已被管理员强制结束。"));
+        c4Manager.reset();
         removeShops();
         removeScoreboard();
         this.bossBar.removeAllPlayers();

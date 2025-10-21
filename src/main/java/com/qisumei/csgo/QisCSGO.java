@@ -32,10 +32,9 @@ public class QisCSGO {
 
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.createItems(MODID);
     public static final DeferredRegister<Block> BLOCKS = DeferredRegister.createBlocks(MODID);
-
     public static final DeferredHolder<Item, C4Item> C4_ITEM = ITEMS.register("c4", C4Item::new);
-
-    public static final DeferredBlock<C4Block> C4_BLOCK = (DeferredBlock<C4Block>) BLOCKS.register("c4",
+    //定义C4方块
+    public static final DeferredBlock<C4Block> C4_BLOCK = (DeferredBlock<C4Block>) QisCSGO.BLOCKS.register("c4",
         () -> new C4Block(BlockBehaviour.Properties.of()
             .destroyTime(6.45f)
             .explosionResistance(1200.0f)
@@ -43,8 +42,10 @@ public class QisCSGO {
             .noOcclusion())
     );
 
+    
+
     public QisCSGO(IEventBus modEventBus, ModContainer container) {
-        LOGGER.info("Qisu's CSGO Mod is loading!");
+        LOGGER.info("Qis的CSGO已被成功加载");
 
         container.registerConfig(ModConfig.Type.SERVER, ServerConfig.SPEC);
 

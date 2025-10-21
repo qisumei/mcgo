@@ -9,22 +9,20 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * C4管理器，封装所有与C4相关的逻辑，包括状态管理、安放、拆除和爆炸。
- * Match类通过此类来管理C4，实现功能解耦。
+ * Match类通过此类来管理C4
  */
 public class C4Manager {
 
@@ -59,7 +57,67 @@ public class C4Manager {
     }
 
     /**
-     * 【新增】处理C4掉落在地上时的坐标广播和距离显示。
+     * 【新增】处理所有与C4相关的玩家tick逻辑。
+     * 由 GameEventsHandler.onPlayerTick() 调用。
+     * @param player 当前tick的玩家
+     */
+    public void handlePlayerTick(ServerPlayer player) {
+        PlayerStats stats = match.getPlayerStats().get(player.getUUID());
+        if (stats == null) {
+            return;
+        }
+
+        // 逻辑一：检查CT玩家是否非法持有C4
+        if ("CT".equals(stats.getTeam())) {
+            checkForIllegalC4Holder(player);
+        }
+        // 逻辑二：为T玩家提供包点安放提示
+        else if ("T".equals(stats.getTeam())) {
+            handleC4PlantingHint(player);
+        }
+        
+        // 逻辑三：处理CT玩家的拆弹行为
+        if (isPlanted && "CT".equals(stats.getTeam())) {
+            handlePlayerDefuseTick(player);
+        }
+    }
+
+    /**
+     * 【新增】检查CT玩家是否非法持有C4，如果是则强制丢弃。
+     * (从 GameEventsHandler 迁移而来)
+     * @param player 要检查的CT玩家
+     */
+    private void checkForIllegalC4Holder(ServerPlayer player) {
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack stack = player.getInventory().getItem(i);
+            if (stack.is(QisCSGO.C4_ITEM.get())) {
+                ItemStack c4ToDrop = stack.copy();
+                player.getInventory().setItem(i, ItemStack.EMPTY);
+                player.drop(c4ToDrop, false, false);
+                player.sendSystemMessage(Component.literal("§c作为CT，你不能持有C4！已强制丢弃。").withStyle(ChatFormatting.RED));
+                QisCSGO.LOGGER.warn("已强制CT玩家 {} 丢弃C4。", player.getName().getString());
+                break;
+            }
+        }
+    }
+
+    /**
+     * 【新增】当T玩家手持C4在包点时，给予屏幕提示。
+     * (从 GameEventsHandler 迁移而来)
+     * @param player 要检查的T玩家
+     */
+    private void handleC4PlantingHint(ServerPlayer player) {
+        boolean holdingC4 = player.getMainHandItem().is(QisCSGO.C4_ITEM.get()) || player.getOffhandItem().is(QisCSGO.C4_ITEM.get());
+        if (holdingC4 && match.getRoundState() == Match.RoundState.IN_PROGRESS) {
+            if (match.isPlayerInBombsite(player)) {
+                Component message = Component.literal("你正处于炸弹安放区，可以安放C4！").withStyle(ChatFormatting.GREEN);
+                player.sendSystemMessage(message, true); // 发送到 Action Bar
+            }
+        }
+    }
+
+    /**
+     * 处理C4掉落在地上时的坐标广播和距离显示。
      */
     private void handleDroppedC4Tick() {
         // 只有在C4未安放时才检查掉落物
@@ -97,7 +155,7 @@ public class C4Manager {
     }
 
     /**
-     * 【新增】在比赛区域内寻找掉落的C4实体。
+     * 在比赛区域内寻找掉落的C4实体。
      * @return 如果找到，则返回ItemEntity对象；否则返回null。
      */
     private ItemEntity findDroppedC4() {
@@ -149,9 +207,80 @@ public class C4Manager {
 
     public void onC4Exploded() {
         if (c4Pos != null) {
-            match.applyCustomExplosionDamage(c4Pos);
+            this.applyCustomExplosionDamage(c4Pos);
         }
         match.endRound("T", "炸弹已爆炸");
+    }
+
+    /**
+     * 从T阵营中随机挑选一名玩家给予C4。
+     * (从 Match 类迁移而来)
+     */
+    public void giveC4ToRandomT() {
+        List<ServerPlayer> tPlayers = match.getPlayerStats().entrySet().stream()
+            .filter(e -> "T".equals(e.getValue().getTeam()))
+            .map(e -> match.getServer().getPlayerList().getPlayer(e.getKey()))
+            .filter(Objects::nonNull)
+            .toList(); 
+
+        if (!tPlayers.isEmpty()) {
+            ServerPlayer playerWithC4 = tPlayers.get(new Random().nextInt(tPlayers.size()));
+            playerWithC4.getInventory().add(new ItemStack(QisCSGO.C4_ITEM.get()));
+            playerWithC4.sendSystemMessage(Component.literal("§e你携带了C4炸弹！").withStyle(ChatFormatting.BOLD));
+        }
+    }
+
+    /**
+     * 应用自定义的C4爆炸伤害。
+     * (从 Match 类迁移而来)
+     * @param c4Pos C4爆炸的位置
+     */
+    private void applyCustomExplosionDamage(BlockPos c4Pos) {
+        final double explosionRadius = 16.0;
+        final float maxDamage = 100.0f;
+
+        double explosionX = c4Pos.getX() + 0.5;
+        double explosionY = c4Pos.getY() + 0.5;
+        double explosionZ = c4Pos.getZ() + 0.5;
+
+        DamageSource damageSource = match.getServer().overworld().damageSources().genericKill();
+
+        // 遍历 alivePlayers 的一个副本，而不是直接遍历它本身
+        // 这样可以防止在 player.hurt() 导致玩家死亡并从 alivePlayers 移除时发生并发修改异常
+        for (UUID playerUUID : new ArrayList<>(match.getAlivePlayers())) {
+            ServerPlayer player = match.getServer().getPlayerList().getPlayer(playerUUID);
+            // 确保玩家仍然在线且存活，因为在遍历副本期间，原始列表可能已经改变
+            if (player == null || !player.isAlive()) continue;
+
+            double distanceSq = player.distanceToSqr(explosionX, explosionY, explosionZ);
+
+            if (distanceSq < explosionRadius * explosionRadius) {
+                double distance = Math.sqrt(distanceSq);
+                float damageFalloff = (float) (1.0 - distance / explosionRadius);
+                float damageToApply = maxDamage * damageFalloff;
+
+                if (damageToApply > 0) {
+                    player.hurt(damageSource, damageToApply);
+                }
+            }
+        }
+
+        for (UUID playerUUID : match.getAlivePlayers()) {
+            ServerPlayer player = match.getServer().getPlayerList().getPlayer(playerUUID);
+            if (player == null) continue;
+
+            double distanceSq = player.distanceToSqr(explosionX, explosionY, explosionZ);
+
+            if (distanceSq < explosionRadius * explosionRadius) {
+                double distance = Math.sqrt(distanceSq);
+                float damageFalloff = (float) (1.0 - distance / explosionRadius);
+                float damageToApply = maxDamage * damageFalloff;
+
+                if (damageToApply > 0) {
+                    player.hurt(damageSource, damageToApply);
+                }
+            }
+        }
     }
 
     public void handlePlayerDefuseTick(ServerPlayer player) {

@@ -16,11 +16,13 @@ import javax.annotation.Nonnull;
 
 /**
  * C4方块类，继承自Block类。
- * [核心修改] 这个方块现在是坚不可摧的(-1.0f)，其拆除逻辑完全由外部的Match和GameEventsHandler处理。
+ * 这个方块现在是坚不可摧的(-1.0f)，其拆除逻辑完全由外部的Match和GameEventsHandler处理。
  * 重构后：通过C4Manager来处理C4相关逻辑。
  */
 public class C4Block extends Block {
     private static final VoxelShape C4_SHAPE = Block.box(0, 0, 0, 15, 5, 12);
+
+    
 
     /**
      * 构造函数，创建一个新的C4方块实例。
