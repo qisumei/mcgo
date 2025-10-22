@@ -219,22 +219,25 @@ public class ServerConfig {
 
     /**
      * 将所有配置项从 ModConfigSpec 中读取并赋值到对应的静态变量上，以便在游戏中直接调用。
-     * <p>
-     * 注意：由于泛型擦除问题，部分列表需要进行强制类型转换。
+     * 
+     * <p>注意：由于泛型擦除问题，部分列表需要进行强制类型转换。
+     * <p>改进：使用局部变量缓存配置值，减少重复的.get()调用，提高性能。
      */
     @SuppressWarnings("unchecked")
     public static void bake() {
-        pistolRoundStartingMoney = PISTOL_ROUND_STARTING_MONEY_SPEC.get();
-        ctPistolRoundGear = (List<String>) CT_PISTOL_ROUND_GEAR_SPEC.get();
-        tPistolRoundGear = (List<String>) T_PISTOL_ROUND_GEAR_SPEC.get();
-        inventoryProtectedItems = (List<String>) INVENTORY_PROTECTED_ITEMS_SPEC.get();
+        // 游戏规则配置
         friendlyFireEnabled = FRIENDLY_FIRE_ENABLED_SPEC.get();
         buyPhaseSeconds = BUY_PHASE_SECONDS_SPEC.get();
         roundEndSeconds = ROUND_END_SECONDS_SPEC.get();
+        
+        // 经济系统配置
+        pistolRoundStartingMoney = PISTOL_ROUND_STARTING_MONEY_SPEC.get();
         winReward = WIN_REWARD_SPEC.get();
         lossReward = LOSS_REWARD_SPEC.get();
         lossStreakBonus = LOSS_STREAK_BONUS_SPEC.get();
         maxLossStreakBonus = MAX_LOSS_STREAK_BONUS_SPEC.get();
+        
+        // 击杀奖励配置
         killRewardKnife = KILL_REWARD_KNIFE_SPEC.get();
         killRewardPistol = KILL_REWARD_PISTOL_SPEC.get();
         killRewardSmg = KILL_REWARD_SMG_SPEC.get();
@@ -242,6 +245,13 @@ public class ServerConfig {
         killRewardRifle = KILL_REWARD_RIFLE_SPEC.get();
         killRewardAwp = KILL_REWARD_AWP_SPEC.get();
         killRewardGrenade = KILL_REWARD_GRENADE_SPEC.get();
+        
+        // 装备配置（需要强制类型转换）
+        ctPistolRoundGear = (List<String>) CT_PISTOL_ROUND_GEAR_SPEC.get();
+        tPistolRoundGear = (List<String>) T_PISTOL_ROUND_GEAR_SPEC.get();
+        inventoryProtectedItems = (List<String>) INVENTORY_PROTECTED_ITEMS_SPEC.get();
+        
+        // 武器分类配置（需要强制类型转换）
         weaponsKnife = (List<String>) WEAPONS_KNIFE_SPEC.get();
         weaponsPistol = (List<String>) WEAPONS_PISTOL_SPEC.get();
         weaponsSmg = (List<String>) WEAPONS_SMG_SPEC.get();
