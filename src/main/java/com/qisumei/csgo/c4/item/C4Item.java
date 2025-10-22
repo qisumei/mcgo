@@ -70,20 +70,6 @@ public class C4Item extends Item {
     public void onUseTick(@Nonnull Level world, @Nonnull LivingEntity user, @Nonnull ItemStack stack, int remainingUseTicks) {
         if (!(user instanceof ServerPlayer player) || world.isClientSide()) return;
 
-        // --- 1. 安放进度条显示逻辑 ---
-        int totalUseDuration = getUseDuration(stack, user);
-        int progressTicks = totalUseDuration - remainingUseTicks;
-        int percentage = (int) (((float) progressTicks / totalUseDuration) * 100);
-        int barsFilled = (int) (((float) progressTicks / totalUseDuration) * 10);
-        StringBuilder progressBar = new StringBuilder("§a[");
-        for (int i = 0; i < 10; i++) {
-            progressBar.append(i < barsFilled ? "|" : "§7-");
-        }
-        progressBar.append("§a] §f").append(percentage).append("%");
-        Component message = Component.literal("安放中... ").append(Component.literal(progressBar.toString()));
-        player.sendSystemMessage(message, true);
-
-        // --- 2. 安放完成时的智能选点逻辑 ---
         if (remainingUseTicks == 1) {
             Match match = MatchManager.getPlayerMatch(player);
             if (match == null) return;
@@ -108,6 +94,20 @@ public class C4Item extends Item {
                 }
             }
         }
+
+        // --- 1. 安放进度条显示逻辑 ---
+        int totalUseDuration = getUseDuration(stack, user);
+        int progressTicks = totalUseDuration - remainingUseTicks;
+        int percentage = (int) (((float) progressTicks / totalUseDuration) * 100);
+        int barsFilled = (int) (((float) progressTicks / totalUseDuration) * 10);
+        StringBuilder progressBar = new StringBuilder("§a[");
+        for (int i = 0; i < 10; i++) {
+            progressBar.append(i < barsFilled ? "|" : "§7-");
+        }
+        progressBar.append("§a] §f").append(percentage).append("%");
+        Component message = Component.literal("安放中... ").append(Component.literal(progressBar.toString()));
+        player.sendSystemMessage(message, true);
+        
     }
     
     /**

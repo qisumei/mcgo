@@ -43,7 +43,8 @@ public class QisCSGO {
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.createItems(MODID);
     public static final DeferredRegister<Block> BLOCKS = DeferredRegister.createBlocks(MODID);
     public static final DeferredHolder<Item, C4Item> C4_ITEM = ITEMS.register("c4", C4Item::new);
-    //定义C4方块
+    public static final DeferredHolder<Item, SmokeGrenadeItem> SMOKE_GRENADE_ITEM = ITEMS.register("smoke_grenade",
+            () -> new SmokeGrenadeItem(new Item.Properties()));
     public static final DeferredBlock<C4Block> C4_BLOCK = (DeferredBlock<C4Block>) QisCSGO.BLOCKS.register("c4",
         () -> new C4Block(BlockBehaviour.Properties.of()
             .destroyTime(6.45f)
@@ -117,6 +118,7 @@ public class QisCSGO {
     private void onBuildCreativeModeTabContents(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.COMBAT) {
             event.accept(C4_ITEM.get());
+            event.accept(SMOKE_GRENADE_ITEM.get());
         }
     }
 }
