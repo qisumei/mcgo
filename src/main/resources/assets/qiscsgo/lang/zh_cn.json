@@ -3,6 +3,9 @@
     "block.qiscsgo.c4": "C4",
     "subtitles.qiscsgo.tw": "T阵营胜利",
     "subtitles.qiscsgo.c4_place": "炸弹已安放",
-    "subtitles.qiscsgo.ctw": "CT阵营胜利"
+    "subtitles.qiscsgo.ctw": "CT阵营胜利",
+    "key.categories.qiscsgo": "MCTP的CSGO",
+    "key.qiscsgo.open_shop": "打开商店 (P键)",
+    "item.qiscsgo.smoke_grenade": "烟雾弹"
     
 }
