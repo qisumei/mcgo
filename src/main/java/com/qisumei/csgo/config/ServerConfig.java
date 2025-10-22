@@ -39,6 +39,7 @@ public class ServerConfig {
     public static final ModConfigSpec.ConfigValue<List<? extends String>> WEAPONS_RIFLE_SPEC;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> WEAPONS_AWP_SPEC;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> WEAPONS_GRENADE_SPEC;
+    public static final ModConfigSpec.ConfigValue<String> TEAM_SWAP_MONEY_STRATEGY_SPEC;
 
     // --- 静态变量，用于在游戏中直接访问配置值 ---
 
@@ -168,6 +169,13 @@ public class ServerConfig {
     public static List<String> weaponsGrenade;
 
 
+
+    /**
+     * 换边时的资金清空策略
+     * 可选值：CLEAR_ALL（清空所有）, CLEAR_TEMPORARY_ONLY（仅清空临时资金）, 
+     *        KEEP_ALL（保留所有）, RESET_TO_PISTOL_ROUND（重置为手枪局起始资金，默认）
+     */
+    public static String teamSwapMoneyStrategy;
     static {
         // 定义游戏规则相关配置项
         BUILDER.push("Game Rules");
@@ -183,6 +191,11 @@ public class ServerConfig {
         LOSS_REWARD_SPEC = BUILDER.comment("回合失败基础奖励").defineInRange("lossReward", 1400, 0, 16000);
         LOSS_STREAK_BONUS_SPEC = BUILDER.comment("每额外连败一回合的奖励").defineInRange("lossStreakBonus", 500, 0, 16000);
         MAX_LOSS_STREAK_BONUS_SPEC = BUILDER.comment("连败奖励的上限 (不含基础失败奖励)").defineInRange("maxLossStreakBonus", 3400, 0, 16000);
+        TEAM_SWAP_MONEY_STRATEGY_SPEC = BUILDER.comment(
+            "换边时的资金清空策略",
+            "可选值: CLEAR_ALL（清空所有资金）, CLEAR_TEMPORARY_ONLY（仅清空临时资金，保留基础资金）,",
+            "       KEEP_ALL（保留所有资金）, RESET_TO_PISTOL_ROUND（重置为手枪局起始资金，推荐）"
+        ).define("teamSwapMoneyStrategy", "RESET_TO_PISTOL_ROUND");
         BUILDER.pop();
 
         // 击杀奖励配置项
@@ -249,6 +262,7 @@ public class ServerConfig {
         weaponsRifle = (List<String>) WEAPONS_RIFLE_SPEC.get();
         weaponsAwp = (List<String>) WEAPONS_AWP_SPEC.get();
         weaponsGrenade = (List<String>) WEAPONS_GRENADE_SPEC.get();
+        teamSwapMoneyStrategy = TEAM_SWAP_MONEY_STRATEGY_SPEC.get();
     }
 }
 
