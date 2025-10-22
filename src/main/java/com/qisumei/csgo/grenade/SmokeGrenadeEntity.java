@@ -21,16 +21,16 @@ import net.minecraft.world.phys.Vec3;
  */
 public class SmokeGrenadeEntity extends AbstractGrenadeEntity {
     // --- 烟雾效果常量 ---
-    private static final int SMOKE_DURATION_TICKS = 1 * 20; // 烟雾持续25秒
+    private static final int SMOKE_DURATION_TICKS = 2 * 20; // 烟雾持续25秒
     private static final float SMOKE_RADIUS = 6.0F; // 烟雾半径
-    private static final int PARTICLES_PER_TICK = 15; // 每tick生成的粒子数量
+    private static final int PARTICLES_PER_TICK = 20; // 每tick生成的粒子数量
     // --- 状态变量 ---
     private boolean isSmoking = false; // 是否正在产生烟雾
     private int smokeTicksLeft = 0; // 烟雾剩余持续时间
     public SmokeGrenadeEntity(Level world, LivingEntity owner) {
 
 
-        super(ModEntityTypes.SMOKE_GRENADE.get(), owner, world, 2, 0.4F);
+        super(ModEntityTypes.SMOKE_GRENADE.get(), owner, world, 20, 0.4F);
     }
     public SmokeGrenadeEntity(EntityType<? extends ThrowableItemProjectile> entityType, Level world) {
         super(entityType, world);
@@ -40,7 +40,7 @@ public class SmokeGrenadeEntity extends AbstractGrenadeEntity {
         if (!this.level().isClientSide && !isSmoking) {
             this.isSmoking = true;
             this.smokeTicksLeft = SMOKE_DURATION_TICKS;
-            this.setDeltaMovement(Vec3.ZERO);
+            //this.setDeltaMovement(Vec3.ZERO);
         }
     }
 

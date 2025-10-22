@@ -54,7 +54,7 @@ public abstract class CampfireSmokeParticleMixin extends Particle {
         // 原版篝火粒子的 lifetime 大约在 160 到 200 ticks (8-10秒) 之间。
         // 我们可以将它设置为一个更大的值，例如延长一倍。
         // 这里设置为 320 ticks (16秒) 的基础值，再加上一个随机值，使其消失得更自然。
-        this.lifetime = 320 + this.random.nextInt(80); // 最终生命周期为 16-20 秒
+        this.lifetime = 600 + this.random.nextInt(80); // 最终生命周期为 16-20 秒
 
         // this.scale() 是从父类 Particle 继承来的公共方法。
         // 它会将粒子的 quadSize (渲染大小) 乘以指定的倍数。
