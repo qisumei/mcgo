@@ -5,16 +5,6 @@ import net.minecraft.server.level.ServerPlayer;
 
 /**
  * C4 控制器接口，定义 C4 炸弹系统的核心行为。
- * 
- * <p>此接口遵循依赖倒置原则，允许 Match 类依赖于抽象接口
- * 而不是具体的 C4Manager 实现。这提高了代码的灵活性和可测试性。</p>
- * 
- * <p>设计优势：</p>
- * <ul>
- *   <li>抽象化：Match 不需要知道 C4 的具体实现细节</li>
- *   <li>可测试：可以注入 mock 实现进行单元测试</li>
- *   <li>可扩展：可以提供不同的 C4 实现而不修改 Match 类</li>
- * </ul>
  */
 public interface C4Controller {
     /**

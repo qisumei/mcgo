@@ -30,11 +30,7 @@ import java.util.Objects;
 
 /**
  * Match类，管理一场CSGO比赛的整个生命周期和所有核心逻辑。
- * 
- * 改进：
- * - 使用依赖注入模式降低耦合
- * - 通过 MatchContext 接口对外暴露最小 API
- * - 遵循单一职责原则，将职责委托给专门的服务类
+ * 包括比赛状态、队伍信息、地图设置、回合管理、玩家统计等。
  */
 public class Match implements MatchContext {
 
@@ -1271,4 +1267,3 @@ public class Match implements MatchContext {
          this.tickCounter = ServerConfig.roundEndSeconds * 20;
      }
 }
-
