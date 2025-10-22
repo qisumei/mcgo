@@ -29,11 +29,42 @@ import java.util.Objects;
 
 /**
  * Match类，管理一场CSGO比赛的整个生命周期和所有核心逻辑。
+ * 
+ * <p>改进点：
+ * <ul>
+ *   <li>改进了依赖注入和解耦设计</li>
+ *   <li>应用Java 21的文本块和模式匹配特性</li>
+ *   <li>增强了空值检查和防御性编程</li>
+ *   <li>使用var简化局部变量声明</li>
+ * </ul>
  */
 public class Match implements MatchContext {
 
-    public enum MatchState { PREPARING, IN_PROGRESS, FINISHED }
-    public enum RoundState { BUY_PHASE, IN_PROGRESS, ROUND_END, PAUSED }
+    /**
+     * 比赛状态枚举
+     */
+    public enum MatchState { 
+        /** 准备阶段 */
+        PREPARING, 
+        /** 进行中 */
+        IN_PROGRESS, 
+        /** 已结束 */
+        FINISHED 
+    }
+    
+    /**
+     * 回合状态枚举
+     */
+    public enum RoundState { 
+        /** 购买阶段 */
+        BUY_PHASE, 
+        /** 战斗进行中 */
+        IN_PROGRESS, 
+        /** 回合结束 */
+        ROUND_END, 
+        /** 暂停 */
+        PAUSED 
+    }
 
     // --- 比赛基础信息 ---
     private final String name;
@@ -111,6 +142,17 @@ public class Match implements MatchContext {
                  MatchScoreboard scoreboardManager,
                  ServerCommandExecutor commandExecutor,
                  PlayerService playerService) {
+        // 参数验证
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Match name cannot be null or blank");
+        }
+        if (maxPlayers <= 0) {
+            throw new IllegalArgumentException("Max players must be positive: " + maxPlayers);
+        }
+        if (server == null) {
+            throw new IllegalArgumentException("Server cannot be null");
+        }
+        
         this.name = name;
         this.state = MatchState.PREPARING;
         this.maxPlayers = maxPlayers;
@@ -120,7 +162,7 @@ public class Match implements MatchContext {
         this.tSpawns = new ArrayList<>();
         this.totalRounds = 12;
         this.roundTimeSeconds = 120; // 默认2分钟
-        String safeName = name.replaceAll("[^a-zA-Z0-9_.-]", "");
+        var safeName = name.replaceAll("[^a-zA-Z0-9_.-]", "");
         this.ctTeamName = safeName + "_CT";
         this.tTeamName = safeName + "_T";
         this.currentRound = 0;
@@ -232,19 +274,23 @@ public class Match implements MatchContext {
             swapTeams();
         }
         
-        // 给玩家广播当前比分
-        String titleJson = String.format(
-            "[{\"text\":\"CT \",\"color\":\"blue\"},{\"text\":\"%d - %d\",\"color\":\"white\"},{\"text\":\" T\",\"color\":\"gold\"}]",
-            ctScore, tScore
-        );
+        // 给玩家广播当前比分 - 使用Java 21文本块提高可读性
+        var titleJson = """
+            [{"text":"CT ","color":"blue"},\
+            {"text":"%d - %d","color":"white"},\
+            {"text":" T","color":"gold"}]
+            """.formatted(ctScore, tScore).trim();
         
-        forEachOnlinePlayer((player, stats) -> commandExecutor.executeGlobal("title " + player.getName().getString() + " title " + titleJson));
+        forEachOnlinePlayer((player, stats) -> 
+            commandExecutor.executeGlobal("title " + player.getName().getString() + " title " + titleJson));
 
-        // 全局聊天广播比分
-        String chatJson = String.format(
-            "[{\"text\":\"%s：\",\"color\":\"yellow\"},{\"text\":\"CT \",\"color\":\"blue\"},{\"text\":\"%d:%d\",\"color\":\"white\",\"bold\":true},{\"text\":\" T\",\"color\":\"gold\"}]",
-            this.name, ctScore, tScore
-        );
+        // 全局聊天广播比分 - 使用Java 21文本块
+        var chatJson = """
+            [{"text":"%s：","color":"yellow"},\
+            {"text":"CT ","color":"blue"},\
+            {"text":"%d:%d","color":"white","bold":true},\
+            {"text":" T","color":"gold"}]
+            """.formatted(this.name, ctScore, tScore).trim();
         commandExecutor.executeGlobal("tellraw @a " + chatJson);
 
         // 4. 设置回合状态为购买阶段
@@ -331,33 +377,39 @@ public class Match implements MatchContext {
 
     /**
      * 在购买阶段检查玩家是否超出购买区域，如果超出则传送回出生点。
+     * 使用Java 21的var简化局部变量声明
      */
     private void checkPlayerBuyZone() {
         final double maxDistance = 10.0;
-        Random random = new Random();
+        var random = new Random();
 
-        for (UUID playerUUID : playerStats.keySet()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
+        for (var playerUUID : playerStats.keySet()) {
+            var player = server.getPlayerList().getPlayer(playerUUID);
             if (player == null) continue;
 
-            PlayerStats stats = playerStats.get(playerUUID);
+            var stats = playerStats.get(playerUUID);
             if (stats == null) continue;
 
-            String team = stats.getTeam();
-            BlockPos shopPos = "CT".equals(team) ? ctShopPos : tShopPos;
-            List<BlockPos> spawns = "CT".equals(team) ? ctSpawns : tSpawns;
+            var team = stats.getTeam();
+            var shopPos = "CT".equals(team) ? ctShopPos : tShopPos;
+            var spawns = "CT".equals(team) ? ctSpawns : tSpawns;
 
             if (shopPos == null || spawns.isEmpty()) continue;
 
-            double distance = Math.sqrt(player.distanceToSqr(shopPos.getX() + 0.5, player.getY(), shopPos.getZ() + 0.5));
+            var distance = Math.sqrt(player.distanceToSqr(
+                shopPos.getX() + 0.5, player.getY(), shopPos.getZ() + 0.5));
 
             if (distance > maxDistance) {
-                BlockPos spawnPos = spawns.get(random.nextInt(spawns.size()));
-                player.teleportTo(server.overworld(), spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, player.getYRot(), player.getXRot());
+                var spawnPos = spawns.get(random.nextInt(spawns.size()));
+                player.teleportTo(server.overworld(), 
+                    spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5, 
+                    player.getYRot(), player.getXRot());
                 // Reset velocity to prevent "moved too quickly" warnings
                 player.setDeltaMovement(0, 0, 0);
                 player.hurtMarked = true;
-                player.sendSystemMessage(Component.literal("购买阶段请不要离开购买区域！").withStyle(ChatFormatting.RED), true);
+                player.sendSystemMessage(
+                    Component.literal("购买阶段请不要离开购买区域！").withStyle(ChatFormatting.RED), 
+                    true);
             }
         }
     }
@@ -929,45 +981,44 @@ public class Match implements MatchContext {
 
     /**
      * 更新Boss栏的显示内容和进度。
+     * 使用Java 21的增强switch表达式提高代码可读性
      */
     private void updateBossBar() {
         switch (this.roundState) {
-            case BUY_PHASE:
-                int buyPhaseTotalTicks = ServerConfig.buyPhaseSeconds * 20;
-                float buyProgress = (float) this.tickCounter / buyPhaseTotalTicks;
+            case BUY_PHASE -> {
+                var buyPhaseTotalTicks = ServerConfig.buyPhaseSeconds * 20;
+                var buyProgress = (float) this.tickCounter / buyPhaseTotalTicks;
                 this.bossBar.setName(Component.literal("购买阶段剩余: " + (this.tickCounter / 20 + 1) + "s"));
                 this.bossBar.setColor(BossEvent.BossBarColor.GREEN);
                 this.bossBar.setProgress(buyProgress);
-                break;
-
-            case IN_PROGRESS:
+            }
+            case IN_PROGRESS -> {
                 if (c4Manager.isC4Planted()) {
-                    int c4TotalTicks = 40 * 20;
-                    int c4TicksLeft = c4Manager.getC4TicksLeft();
-                    float c4Progress = (float) c4TicksLeft / c4TotalTicks;
-                    this.bossBar.setName(Component.literal("C4即将爆炸: " + (c4TicksLeft / 20 + 1) + "s").withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
+                    var c4TotalTicks = 40 * 20;
+                    var c4TicksLeft = c4Manager.getC4TicksLeft();
+                    var c4Progress = (float) c4TicksLeft / c4TotalTicks;
+                    this.bossBar.setName(Component.literal("C4即将爆炸: " + (c4TicksLeft / 20 + 1) + "s")
+                        .withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
                     this.bossBar.setColor(BossEvent.BossBarColor.RED);
                     this.bossBar.setProgress(c4Progress);
                 } else {
-                    int roundTotalTicks = this.roundTimeSeconds * 20;
-                    float roundProgress = (float) this.tickCounter / roundTotalTicks;
+                    var roundTotalTicks = this.roundTimeSeconds * 20;
+                    var roundProgress = (float) this.tickCounter / roundTotalTicks;
                     this.bossBar.setName(Component.literal("回合剩余时间: " + (this.tickCounter / 20 + 1) + "s"));
                     this.bossBar.setColor(BossEvent.BossBarColor.WHITE);
                     this.bossBar.setProgress(roundProgress);
                 }
-                break;
-
-            case ROUND_END:
+            }
+            case ROUND_END -> {
                 this.bossBar.setName(Component.literal("回合结束"));
                 this.bossBar.setColor(BossEvent.BossBarColor.YELLOW);
                 this.bossBar.setProgress(1.0f);
-                break;
-
-            default:
+            }
+            case PAUSED -> {
                 this.bossBar.setName(Component.literal("比赛暂停"));
                 this.bossBar.setColor(BossEvent.BossBarColor.PURPLE);
                 this.bossBar.setProgress(1.0f);
-                break;
+            }
         }
     }
 
