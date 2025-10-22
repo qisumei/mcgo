@@ -180,7 +180,10 @@ public class ServerConfig {
         // 定义游戏规则相关配置项
         BUILDER.push("Game Rules");
         FRIENDLY_FIRE_ENABLED_SPEC = BUILDER.comment("是否启用友军伤害").define("friendlyFireEnabled", false);
-        BUY_PHASE_SECONDS_SPEC = BUILDER.comment("购买阶段持续时间 (秒)").defineInRange("buyPhaseSeconds", 15, 5, 60);
+        BUY_PHASE_SECONDS_SPEC = BUILDER.comment(
+            "购买阶段持续时间 (秒)",
+            "推荐设置为 90 秒以确保玩家有充足时间进行经济决策"
+        ).defineInRange("buyPhaseSeconds", 90, 5, 120);
         ROUND_END_SECONDS_SPEC = BUILDER.comment("回合结束展示时间 (秒)").defineInRange("roundEndSeconds", 5, 1, 30);
         BUILDER.pop();
 
@@ -189,6 +192,8 @@ public class ServerConfig {
         PISTOL_ROUND_STARTING_MONEY_SPEC = BUILDER.comment(
             "手枪局或换边后第一局的起始资金",
             "当前默认值: 800",
+            "经济平衡系统: 游戏开局时所有玩家获得 10000 统一资金",
+            "每回合基础资金: 5000 + 上回合任务奖励",
             "平衡性建议: 考虑降低到 8-10 以匹配缩减后的武器价格（见 docs/ECONOMY_BALANCE_ANALYSIS.md）",
             "如需更紧张的经济体验，推荐值: 8"
         ).defineInRange("pistolRoundStartingMoney", 800, 0, 16000);

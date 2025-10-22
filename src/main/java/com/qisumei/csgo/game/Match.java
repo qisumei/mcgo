@@ -124,6 +124,9 @@ public class Match implements MatchContext {
     
     // --- 回合经济服务，处理经济分配逻辑 ---
     private final RoundEconomyService roundEconomyService;
+    
+    // --- 经济平衡管理器，处理经济平衡逻辑 ---
+    private final EconomicBalanceManager economicBalanceManager;
 
 
     /**
@@ -210,6 +213,9 @@ public class Match implements MatchContext {
         this.roundEconomyService = new RoundEconomyService(
             this.economyService != null ? this.economyService : new com.qisumei.csgo.service.EconomyServiceImpl()
         );
+        
+        // 初始化经济平衡管理器
+        this.economicBalanceManager = new EconomicBalanceManager();
     }
     
     /**
@@ -448,6 +454,9 @@ public class Match implements MatchContext {
         this.ctScore = this.tScore;
         this.tScore = tempScore;
         
+        // 重置连胜计数
+        economicBalanceManager.resetConsecutiveWins();
+        
         // 收集受影响的玩家
         Map<UUID, ServerPlayer> affectedPlayers = new HashMap<>();
         
@@ -497,7 +506,8 @@ public class Match implements MatchContext {
             boolean wasWinner = team.equals(this.lastRoundWinner);
             boolean wasSurvivor = this.roundSurvivors.contains(playerUUID);
 
-            performSelectiveClear(player);
+            // 使用新的装备槽位管理器进行清空和初始化
+            InventorySlotManager.clearAndInitializeInventory(player);
 
             if (isPistolRound) {
                 giveInitialGear(player, team);
@@ -508,8 +518,6 @@ public class Match implements MatchContext {
                     }
                 }
             }
-            // 去重近战，避免重复给予铁剑等近战
-            purgeDuplicateMelee(player);
 
             stats.clearRoundGear();
 
@@ -544,22 +552,7 @@ public class Match implements MatchContext {
         this.playerService.performSelectiveClear(player);
     }
 
-    // 去重近战：只保留第一把铁剑，其余清除
-    private void purgeDuplicateMelee(ServerPlayer player) {
-        int kept = 0;
-        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-            ItemStack s = player.getInventory().getItem(i);
-            if (s.isEmpty()) continue;
-            if (s.getItem() == net.minecraft.world.item.Items.IRON_SWORD) {
-                if (kept == 0) {
-                    kept = 1; // 保留第一把
-                } else {
-                    player.getInventory().setItem(i, ItemStack.EMPTY); // 清除多余
-                }
-            }
-        }
-        player.getInventory().setChanged();
-    }
+
 
     /**
      * 在手枪局为玩家发放初始装备。
@@ -785,6 +778,9 @@ public class Match implements MatchContext {
         this.alivePlayers.remove(deadPlayer.getUUID());
         PlayerStats stats = playerStats.get(deadPlayer.getUUID());
         if(stats != null) stats.incrementDeaths();
+        
+        // 应用死亡惩罚（20%资金损失）
+        economicBalanceManager.applyDeathPenalty(deadPlayer);
         
         QisCSGO.LOGGER.info("玩家 {} 在比赛 '{}' 中阵亡。", deadPlayer.getName().getString(), name);
         this.checkRoundEndCondition();
@@ -1234,12 +1230,18 @@ public class Match implements MatchContext {
              }
          }
          
-         // 给获胜方玩家奖励（使用 RoundEconomyService）
+         // 给获胜方玩家奖励（使用经济平衡管理器的标准化奖励）
          forEachOnlinePlayer((player, stats) -> {
              if (stats.getTeam().equals(winningTeam)) {
-                 roundEconomyService.distributeWinReward(player);
+                 economicBalanceManager.giveRoundWinReward(player);
              }
          });
+         
+         // 记录回合结果并检查动态平衡
+         boolean shouldApplyDynamicBalance = economicBalanceManager.recordRoundResult(winningTeam);
+         if (shouldApplyDynamicBalance) {
+             economicBalanceManager.applyDynamicBalance(winningTeam, this.playerStats, this.server);
+         }
 
          // 更新统计信息面板
          scoreboardManager.updateScoreboard();

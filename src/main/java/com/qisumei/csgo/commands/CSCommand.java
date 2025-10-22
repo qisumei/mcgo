@@ -126,8 +126,9 @@ public final class CSCommand {
                 .executes(CommandHandlers::checkBalance)
             )
 
-            // --- watch 命令 ---
+            // --- watch 命令 (仅管理员可用) ---
             .then(Commands.literal("watch")
+                .requires(source -> source.hasPermission(2))
                 .then(Commands.argument("name", StringArgumentType.string())
                     // -> /cs watch <比赛名称>
                     .executes(CommandHandlers::watchMatch)
