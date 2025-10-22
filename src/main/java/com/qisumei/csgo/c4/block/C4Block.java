@@ -12,15 +12,17 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraft.world.entity.player.Player;
 
-
 import javax.annotation.Nonnull;
 
 /**
  * C4方块类，继承自Block类。
- * [核心修改] 这个方块现在是坚不可摧的(-1.0f)，其拆除逻辑完全由外部的Match和GameEventsHandler处理。
+ * 这个方块现在是坚不可摧的(-1.0f)，其拆除逻辑完全由外部的Match和GameEventsHandler处理。
+ * 重构后：通过C4Manager来处理C4相关逻辑。
  */
 public class C4Block extends Block {
     private static final VoxelShape C4_SHAPE = Block.box(0, 0, 0, 15, 5, 12);
+
+    
 
     /**
      * 构造函数，创建一个新的C4方块实例。
@@ -42,7 +44,8 @@ public class C4Block extends Block {
 
     /**
      * 当方块被移除时的回调方法。
-     * 这是拆弹成功的最终触发点。当Match类确认拆弹进度达到100%后，会移除这个方块，从而调用此方法。
+     * 这是拆弹成功的最终触发点。当C4Manager确认拆弹进度达到100%后，会移除这个方块，从而调用此方法。
+     * 重构后：通过C4Manager来处理拆弹逻辑。
      * @param state 被移除前的方块状态。
      * @param world 方块所在的世界对象。
      * @param pos 方块的位置坐标。
@@ -58,8 +61,10 @@ public class C4Block extends Block {
                 // 根据C4的位置找到对应的比赛
                 Match match = MatchManager.getMatchFromC4Pos(pos);
                 if (match != null) {
-                    // 调用比赛的C4拆除成功逻辑
-                    match.onC4Defused();
+                    // 修改：通过C4Manager处理C4拆除逻辑
+                    // 注意：这里我们无法直接获取拆弹玩家，因为C4Block的onRemove不包含玩家上下文
+                    // C4Manager会在handlePlayerDefuseTick中记录拆弹玩家
+                    match.getC4Manager().onC4Defused(null); // 传递null，让C4Manager自行处理
                 }
             }
             super.onRemove(state, world, pos, newState, moved);
@@ -68,7 +73,7 @@ public class C4Block extends Block {
 
     /**
      * [核心修改] 重写此方法并返回0.0f，以防止玩家通过常规方式破坏方块。
-     * 拆除逻辑现在完全由 Match.java 和 GameEventsHandler.java 控制。
+     * 拆除逻辑现在完全由 C4Manager 和 GameEventsHandler 控制。
      */
     @Override
     public float getDestroyProgress(@Nonnull BlockState state, @Nonnull Player player, @Nonnull BlockGetter world, @Nonnull BlockPos pos) {
