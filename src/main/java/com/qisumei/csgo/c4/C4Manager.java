@@ -105,6 +105,10 @@ public class C4Manager implements C4Controller {
         context.endRound("T", "炸弹已爆炸");
     }
 
+    /**
+     * 随机给一名 T 队玩家发放 C4。
+     * 改进的防御性编程：更详细的日志记录和错误处理。
+     */
     public void giveC4ToRandomT() {
         // 保护性检查：确保 C4 物品已正确注册
         Item c4Item = null;
@@ -112,6 +116,7 @@ public class C4Manager implements C4Controller {
             c4Item = QisCSGO.C4_ITEM.get();
         } catch (Throwable t) {
             QisCSGO.LOGGER.error("尝试获取 C4_ITEM 时发生异常：", t);
+            return;
         }
 
         if (c4Item == null) {
@@ -119,22 +124,26 @@ public class C4Manager implements C4Controller {
             return;
         }
 
+        // 获取所有在线的 T 队玩家
         List<ServerPlayer> tPlayers = context.getPlayerStats().entrySet().stream()
             .filter(e -> "T".equals(e.getValue().getTeam()))
             .map(e -> context.getServer().getPlayerList().getPlayer(e.getKey()))
             .filter(Objects::nonNull)
             .toList(); 
 
-        if (!tPlayers.isEmpty()) {
-            ServerPlayer playerWithC4 = tPlayers.get(new Random().nextInt(tPlayers.size()));
-            if (playerWithC4 != null) {
-                try {
-                    playerWithC4.getInventory().add(new ItemStack(c4Item));
-                    playerWithC4.sendSystemMessage(Component.literal("§e你携带了C4炸弹！").withStyle(ChatFormatting.BOLD));
-                } catch (Throwable t) {
-                    QisCSGO.LOGGER.error("给玩家发放 C4 时发生异常：", t);
-                }
-            }
+        if (tPlayers.isEmpty()) {
+            QisCSGO.LOGGER.warn("没有在线的 T 队玩家可以接收 C4");
+            return;
+        }
+
+        // 随机选择一名 T 队玩家并发放 C4
+        ServerPlayer playerWithC4 = tPlayers.get(new Random().nextInt(tPlayers.size()));
+        try {
+            playerWithC4.getInventory().add(new ItemStack(c4Item));
+            playerWithC4.sendSystemMessage(Component.literal("§e你携带了C4炸弹！").withStyle(ChatFormatting.BOLD));
+            QisCSGO.LOGGER.info("C4 已发放给玩家 {}", playerWithC4.getName().getString());
+        } catch (Throwable t) {
+            QisCSGO.LOGGER.error("给玩家 {} 发放 C4 时发生异常：", playerWithC4.getName().getString(), t);
         }
     }
 
