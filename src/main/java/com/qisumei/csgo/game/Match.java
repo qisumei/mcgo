@@ -29,13 +29,43 @@ import java.util.Objects;
 
 /**
  * Match类，管理一场CSGO比赛的整个生命周期和所有核心逻辑。
+ * 
+ * 改进：
+ * - 使用依赖注入模式降低耦合
+ * - 通过 MatchContext 接口对外暴露最小 API
+ * - 遵循单一职责原则，将职责委托给专门的服务类
  */
 public class Match implements MatchContext {
 
-    public enum MatchState { PREPARING, IN_PROGRESS, FINISHED }
-    public enum RoundState { BUY_PHASE, IN_PROGRESS, ROUND_END, PAUSED }
+    /**
+     * 比赛状态枚举。
+     * 使用枚举而非常量提供类型安全。
+     */
+    public enum MatchState { 
+        /** 准备阶段 - 玩家加入中 */
+        PREPARING, 
+        /** 进行中 - 比赛正在进行 */
+        IN_PROGRESS, 
+        /** 已结束 - 比赛已完成 */
+        FINISHED 
+    }
+    
+    /**
+     * 回合状态枚举。
+     * 使用枚举而非常量提供类型安全。
+     */
+    public enum RoundState { 
+        /** 购买阶段 - 玩家可以购买装备 */
+        BUY_PHASE, 
+        /** 进行中 - 回合战斗阶段 */
+        IN_PROGRESS, 
+        /** 回合结束 - 显示结果阶段 */
+        ROUND_END, 
+        /** 暂停 - 比赛暂停状态 */
+        PAUSED 
+    }
 
-    // --- 比赛基础信息 ---
+    // --- 比赛基础信息（使用 final 提高代码安全性和可读性）---
     private final String name;
     private MatchState state;
     private final int maxPlayers;
