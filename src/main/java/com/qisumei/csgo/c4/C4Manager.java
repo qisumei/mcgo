@@ -102,7 +102,35 @@ public class C4Manager implements C4Controller {
         if (c4Pos != null) {
             applyCustomExplosionDamage(c4Pos);
         }
+        
+        // C4爆炸时清空所有存活CT玩家的装备
+        clearCtEquipmentOnExplosion();
+        
         context.endRound("T", "炸弹已爆炸");
+    }
+    
+    /**
+     * C4爆炸时清空所有存活CT玩家的装备
+     * 强化"C4防守失败的经济代价"
+     */
+    private void clearCtEquipmentOnExplosion() {
+        for (UUID playerUUID : new ArrayList<>(context.getAlivePlayers())) {
+            ServerPlayer player = context.getServer().getPlayerList().getPlayer(playerUUID);
+            if (player == null) continue;
+            
+            // 只清空CT玩家的装备
+            var stats = context.getPlayerStats().get(playerUUID);
+            if (stats != null && "CT".equals(stats.getTeam())) {
+                // 清空整个背包（包括工具栏和背包）
+                player.getInventory().clearContent();
+                player.sendSystemMessage(
+                    Component.literal("§c炸弹爆炸！你的所有装备已被摧毁！")
+                        .withStyle(ChatFormatting.RED),
+                    false
+                );
+                QisCSGO.LOGGER.info("CT玩家 {} 的装备因C4爆炸而被清空", player.getName().getString());
+            }
+        }
     }
 
     /**

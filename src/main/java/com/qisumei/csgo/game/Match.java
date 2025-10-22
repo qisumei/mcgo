@@ -127,6 +127,9 @@ public class Match implements MatchContext {
     
     // --- 经济平衡管理器，处理经济平衡逻辑 ---
     private final EconomicBalanceManager economicBalanceManager;
+    
+    // --- 购买限制管理器，处理购买限制逻辑 ---
+    private final PurchaseLimitManager purchaseLimitManager;
 
 
     /**
@@ -216,6 +219,9 @@ public class Match implements MatchContext {
         
         // 初始化经济平衡管理器
         this.economicBalanceManager = new EconomicBalanceManager();
+        
+        // 初始化购买限制管理器
+        this.purchaseLimitManager = new PurchaseLimitManager();
     }
     
     /**
@@ -306,8 +312,11 @@ public class Match implements MatchContext {
         // 2. 推进回合数并重置C4状态
         this.currentRound++;
         c4Manager.reset();
+        
+        // 3. 重置购买限制
+        purchaseLimitManager.resetAllPurchases();
 
-        // 3. 检查是否需要换边
+        // 4. 检查是否需要换边
         if (this.currentRound == (this.totalRounds / 2) + 1) {
             swapTeams();
         }
@@ -327,26 +336,26 @@ public class Match implements MatchContext {
         );
         commandExecutor.executeGlobal("tellraw @a " + chatJson);
 
-        // 4. 设置回合状态为购买阶段
+        // 5. 设置回合状态为购买阶段
         this.roundState = RoundState.BUY_PHASE;
         this.tickCounter = ServerConfig.buyPhaseSeconds * 20;
 
-        // 5. 传送玩家、清空背包、并发放该回合应有的装备
+        // 6. 传送玩家、清空背包、并发放该回合应有的装备
         teleportAndPreparePlayers();
         
-        // 6. 处理经济，发放金钱
+        // 7. 处理经济，发放金钱
         distributeRoundIncome();
 
 
-        // 7. 为所有玩家添加购买阶段的无敌效果
+        // 8. 为所有玩家添加购买阶段的无敌效果
         int resistanceDuration = ServerConfig.buyPhaseSeconds * 20;
         forEachOnlinePlayer((player, stats) -> player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, resistanceDuration, 4, false, false, true)));
 
-        // 8. 广播回合开始的消息
+        // 9. 广播回合开始的消息
         broadcastToAllPlayersInMatch(Component.literal("第 " + this.currentRound + " 回合开始！购买阶段！"));
         QisCSGO.LOGGER.info("比赛 '{}': 第 {} 回合开始，进入购买阶段。", name, currentRound);
 
-        // 9. 最后再给T发放C4
+        // 10. 最后再给T发放C4
         c4Manager.giveC4ToRandomT();
     }
 
@@ -1173,6 +1182,22 @@ public class Match implements MatchContext {
      */
     public Set<UUID> getAlivePlayers() {
         return this.alivePlayers;
+    }
+    
+    /**
+     * 获取购买限制管理器
+     * @return PurchaseLimitManager实例
+     */
+    public PurchaseLimitManager getPurchaseLimitManager() {
+        return this.purchaseLimitManager;
+    }
+    
+    /**
+     * 获取经济平衡管理器
+     * @return EconomicBalanceManager实例
+     */
+    public EconomicBalanceManager getEconomicBalanceManager() {
+        return this.economicBalanceManager;
     }
 
     /**
