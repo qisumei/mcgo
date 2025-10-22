@@ -29,13 +29,43 @@ import java.util.Objects;
 
 /**
  * Match类，管理一场CSGO比赛的整个生命周期和所有核心逻辑。
+ * 
+ * 改进：
+ * - 使用依赖注入模式降低耦合
+ * - 通过 MatchContext 接口对外暴露最小 API
+ * - 遵循单一职责原则，将职责委托给专门的服务类
  */
 public class Match implements MatchContext {
 
-    public enum MatchState { PREPARING, IN_PROGRESS, FINISHED }
-    public enum RoundState { BUY_PHASE, IN_PROGRESS, ROUND_END, PAUSED }
+    /**
+     * 比赛状态枚举。
+     * 使用枚举而非常量提供类型安全。
+     */
+    public enum MatchState { 
+        /** 准备阶段 - 玩家加入中 */
+        PREPARING, 
+        /** 进行中 - 比赛正在进行 */
+        IN_PROGRESS, 
+        /** 已结束 - 比赛已完成 */
+        FINISHED 
+    }
+    
+    /**
+     * 回合状态枚举。
+     * 使用枚举而非常量提供类型安全。
+     */
+    public enum RoundState { 
+        /** 购买阶段 - 玩家可以购买装备 */
+        BUY_PHASE, 
+        /** 进行中 - 回合战斗阶段 */
+        IN_PROGRESS, 
+        /** 回合结束 - 显示结果阶段 */
+        ROUND_END, 
+        /** 暂停 - 比赛暂停状态 */
+        PAUSED 
+    }
 
-    // --- 比赛基础信息 ---
+    // --- 比赛基础信息（使用 final 提高代码安全性和可读性）---
     private final String name;
     private MatchState state;
     private final int maxPlayers;
@@ -197,6 +227,7 @@ public class Match implements MatchContext {
 
     /**
      * 正式开始比赛。
+     * 防御性编程：检查必要的前置条件，避免在不完整的状态下开始比赛。
      */
     public void start() {
         // 防御性检查：如果比赛没有玩家，直接返回并记录日志，避免进入不安全的运行时代码路径。
@@ -205,13 +236,23 @@ public class Match implements MatchContext {
             this.bossBar.setName(Component.literal("比赛无法开始：没有玩家"));
             return;
         }
+        
+        // 检查是否设置了出生点
+        if (this.ctSpawns.isEmpty() || this.tSpawns.isEmpty()) {
+            QisCSGO.LOGGER.error("尝试开始比赛 '{}'，但未设置完整的出生点（CT: {}, T: {}）", 
+                this.name, this.ctSpawns.size(), this.tSpawns.size());
+            broadcastToAllPlayersInMatch(Component.literal("§c比赛无法开始：未设置完整的出生点！").withStyle(ChatFormatting.RED));
+            return;
+        }
 
         this.state = MatchState.IN_PROGRESS;
 
         // 使用辅助方法遍历所有在线玩家，减少重复代码
         forEachOnlinePlayer((player, stats) -> setPlayerKnockbackResistance(player, 1000.0));
         // 委托计分板初始化
-        scoreboardManager.setupScoreboard();
+        if (scoreboardManager != null) {
+            scoreboardManager.setupScoreboard();
+        }
         broadcastToAllPlayersInMatch(Component.literal("比赛开始！"));
         startNewRound();
     }
@@ -525,15 +566,19 @@ public class Match implements MatchContext {
 
     /**
      * 在回合开始时为玩家发放收入。
+     * 修正：手枪局应该设置（set）而非增加（give）货币，非手枪局才是增加货币。
      */
     private void distributeRoundIncome() {
          boolean isPistolRound = (currentRound == 1 || currentRound == (totalRounds / 2) + 1);
 
          forEachOnlinePlayer((player, stats) -> {
             if (isPistolRound) {
-                // 【改用虚拟货币】手枪局设置起始资金
-                if (this.economyService != null) this.economyService.giveMoney(player, ServerConfig.pistolRoundStartingMoney);
-                else EconomyManager.setMoney(player, ServerConfig.pistolRoundStartingMoney);
+                // 手枪局设置起始资金（而非增加）
+                if (this.economyService != null) {
+                    this.economyService.setMoney(player, ServerConfig.pistolRoundStartingMoney);
+                } else {
+                    EconomyManager.setMoney(player, ServerConfig.pistolRoundStartingMoney);
+                }
                 player.sendSystemMessage(Component.literal("§6手枪局！起始资金: §e$" + ServerConfig.pistolRoundStartingMoney).withStyle(ChatFormatting.AQUA));
             } else {
                 boolean wasWinner = stats.getTeam().equals(this.lastRoundWinner);
@@ -546,8 +591,11 @@ public class Match implements MatchContext {
                     income = ServerConfig.lossReward + lossBonus;
                     player.sendSystemMessage(Component.literal("§c回合失败。获得 §e$" + income + " §7(含连败奖励)").withStyle(ChatFormatting.RED));
                 }
-                if (this.economyService != null) this.economyService.giveMoney(player, income);
-                else EconomyManager.giveMoney(player, income);
+                if (this.economyService != null) {
+                    this.economyService.giveMoney(player, income);
+                } else {
+                    EconomyManager.giveMoney(player, income);
+                }
             }
         });
      }
@@ -929,18 +977,18 @@ public class Match implements MatchContext {
 
     /**
      * 更新Boss栏的显示内容和进度。
+     * 使用 Java 21 增强的 switch 表达式以提高代码可读性。
      */
     private void updateBossBar() {
         switch (this.roundState) {
-            case BUY_PHASE:
+            case BUY_PHASE -> {
                 int buyPhaseTotalTicks = ServerConfig.buyPhaseSeconds * 20;
                 float buyProgress = (float) this.tickCounter / buyPhaseTotalTicks;
                 this.bossBar.setName(Component.literal("购买阶段剩余: " + (this.tickCounter / 20 + 1) + "s"));
                 this.bossBar.setColor(BossEvent.BossBarColor.GREEN);
                 this.bossBar.setProgress(buyProgress);
-                break;
-
-            case IN_PROGRESS:
+            }
+            case IN_PROGRESS -> {
                 if (c4Manager.isC4Planted()) {
                     int c4TotalTicks = 40 * 20;
                     int c4TicksLeft = c4Manager.getC4TicksLeft();
@@ -955,19 +1003,17 @@ public class Match implements MatchContext {
                     this.bossBar.setColor(BossEvent.BossBarColor.WHITE);
                     this.bossBar.setProgress(roundProgress);
                 }
-                break;
-
-            case ROUND_END:
+            }
+            case ROUND_END -> {
                 this.bossBar.setName(Component.literal("回合结束"));
                 this.bossBar.setColor(BossEvent.BossBarColor.YELLOW);
                 this.bossBar.setProgress(1.0f);
-                break;
-
-            default:
+            }
+            case PAUSED -> {
                 this.bossBar.setName(Component.literal("比赛暂停"));
                 this.bossBar.setColor(BossEvent.BossBarColor.PURPLE);
                 this.bossBar.setProgress(1.0f);
-                break;
+            }
         }
     }
 

@@ -71,9 +71,11 @@ public class GameEventsHandler {
 
     /**
      * 处理玩家死亡事件。
+     * 使用 Java 21 的模式匹配来简化 instanceof 检查。
      */
     @SubscribeEvent
     public static void onPlayerDeath(LivingDeathEvent event) {
+        // Java 21 模式匹配 - 更简洁的类型检查和转换
         if (!(event.getEntity() instanceof ServerPlayer deadPlayer)) return;
 
         // 通过 ServiceFallbacks 获取玩家所处比赛（支持回退）
