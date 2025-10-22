@@ -186,11 +186,36 @@ public class ServerConfig {
 
         // 经济系统相关配置项
         BUILDER.push("Economy");
-        PISTOL_ROUND_STARTING_MONEY_SPEC = BUILDER.comment("手枪局或换边后第一局的起始资金").defineInRange("pistolRoundStartingMoney", 800, 0, 16000);
-        WIN_REWARD_SPEC = BUILDER.comment("回合胜利基础奖励").defineInRange("winReward", 3250, 0, 16000);
-        LOSS_REWARD_SPEC = BUILDER.comment("回合失败基础奖励").defineInRange("lossReward", 1400, 0, 16000);
-        LOSS_STREAK_BONUS_SPEC = BUILDER.comment("每额外连败一回合的奖励").defineInRange("lossStreakBonus", 500, 0, 16000);
-        MAX_LOSS_STREAK_BONUS_SPEC = BUILDER.comment("连败奖励的上限 (不含基础失败奖励)").defineInRange("maxLossStreakBonus", 3400, 0, 16000);
+        PISTOL_ROUND_STARTING_MONEY_SPEC = BUILDER.comment(
+            "手枪局或换边后第一局的起始资金",
+            "当前默认值: 800",
+            "平衡性建议: 考虑降低到 8-10 以匹配缩减后的武器价格（见 docs/ECONOMY_BALANCE_ANALYSIS.md）",
+            "如需更紧张的经济体验，推荐值: 8"
+        ).defineInRange("pistolRoundStartingMoney", 800, 0, 16000);
+        WIN_REWARD_SPEC = BUILDER.comment(
+            "回合胜利基础奖励",
+            "当前默认值: 3250",
+            "平衡性建议: 考虑降低到 32 以匹配缩减后的武器价格",
+            "如需更紧张的经济体验，推荐值: 32"
+        ).defineInRange("winReward", 3250, 0, 16000);
+        LOSS_REWARD_SPEC = BUILDER.comment(
+            "回合失败基础奖励",
+            "当前默认值: 1400",
+            "平衡性建议: 考虑降低到 14 以匹配缩减后的武器价格",
+            "如需更紧张的经济体验，推荐值: 14"
+        ).defineInRange("lossReward", 1400, 0, 16000);
+        LOSS_STREAK_BONUS_SPEC = BUILDER.comment(
+            "每额外连败一回合的奖励",
+            "当前默认值: 500",
+            "平衡性建议: 考虑降低到 5 以匹配缩减后的武器价格",
+            "如需更紧张的经济体验，推荐值: 5"
+        ).defineInRange("lossStreakBonus", 500, 0, 16000);
+        MAX_LOSS_STREAK_BONUS_SPEC = BUILDER.comment(
+            "连败奖励的上限 (不含基础失败奖励)",
+            "当前默认值: 3400",
+            "平衡性建议: 考虑降低到 34 以匹配缩减后的武器价格",
+            "如需更紧张的经济体验，推荐值: 34"
+        ).defineInRange("maxLossStreakBonus", 3400, 0, 16000);
         TEAM_SWAP_MONEY_STRATEGY_SPEC = BUILDER.comment(
             "换边时的资金清空策略",
             "可选值: CLEAR_ALL（清空所有资金）, CLEAR_TEMPORARY_ONLY（仅清空临时资金，保留基础资金）,",
