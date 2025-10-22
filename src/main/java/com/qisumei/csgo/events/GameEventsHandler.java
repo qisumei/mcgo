@@ -25,9 +25,21 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 /**
  * 游戏事件处理器，用于处理服务器 tick、玩家 tick 和玩家死亡等游戏核心事件。
+ * 
+ * <p>改进点：
+ * <ul>
+ *   <li>使用Java 21的增强模式匹配简化类型检查</li>
+ *   <li>使用var简化局部变量声明</li>
+ *   <li>改进代码可读性和结构</li>
+ * </ul>
  */
 @EventBusSubscriber
-public class GameEventsHandler {
+public final class GameEventsHandler {
+    
+    // 私有构造器防止实例化
+    private GameEventsHandler() {
+        throw new AssertionError("Event handler class should not be instantiated");
+    }
 
     /**
      * 每个服务器 tick 结束后调用该方法，驱动 MatchManager 的逻辑更新。
@@ -41,89 +53,145 @@ public class GameEventsHandler {
     /**
      * 在每个玩家的游戏刻（tick）中调用。
      * 将tick事件转发给C4Manager来处理所有C4相关的逻辑。
+     * 使用Java 21的模式匹配简化类型检查
+     * 
      * @param event 玩家 tick 事件对象
      */
     @SubscribeEvent
     public static void onPlayerTick(PlayerTickEvent.Post event) {
-        // 确认事件发生在服务端，并且玩家是 ServerPlayer 类型
-        if (event.getEntity() instanceof ServerPlayer player) {
-            // Ensure a default ServerCommandExecutor is registered (once) when server is available
+        // 使用Java 21的模式匹配简化instanceof检查和类型转换
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+
+        // 确保注册默认的ServerCommandExecutor（懒加载，只注册一次）
+        ensureCommandExecutorRegistered(player);
+
+        // 获取该玩家所在的比赛
+        var match = ServiceFallbacks.getPlayerMatch(player);
+        if (match == null || match.getState() != Match.MatchState.IN_PROGRESS) {
+            return;
+        }
+
+        // 将所有C4相关的tick逻辑委托给C4Manager处理
+        match.getC4Manager().handlePlayerTick(player);
+    }
+
+    /**
+     * 确保ServerCommandExecutor已注册（懒加载）
+     * 
+     * @param player 服务器玩家实例，用于获取server对象
+     */
+    private static void ensureCommandExecutorRegistered(ServerPlayer player) {
+        if (ServiceRegistry.get(ServerCommandExecutor.class) == null) {
             try {
-                if (ServiceRegistry.get(ServerCommandExecutor.class) == null) {
-                    ServiceRegistry.register(ServerCommandExecutor.class, new ServerCommandExecutorImpl(player.server));
-                    QisCSGO.LOGGER.info("Registered default ServerCommandExecutorImpl via ServiceRegistry.");
-                }
+                ServiceRegistry.register(
+                    ServerCommandExecutor.class, 
+                    new ServerCommandExecutorImpl(player.server)
+                );
+                QisCSGO.LOGGER.info("Registered default ServerCommandExecutorImpl via ServiceRegistry.");
             } catch (Exception ex) {
                 QisCSGO.LOGGER.warn("Failed to register ServerCommandExecutorImpl: {}", ex.getMessage());
             }
-
-            // 获取该玩家所在的比赛（使用 ServiceFallbacks 以支持回退）
-            Match match = ServiceFallbacks.getPlayerMatch(player);
-             // 如果玩家不在比赛中，则不进行任何操作
-             if (match == null || match.getState() != Match.MatchState.IN_PROGRESS) {
-                 return;
-             }
-
-            // 将所有C4相关的tick逻辑委托给C4Manager处理
-            match.getC4Manager().handlePlayerTick(player);
         }
     }
 
     /**
      * 处理玩家死亡事件。
+     * 使用Java 21的模式匹配和var简化代码
+     * 
+     * @param event 玩家死亡事件
      */
     @SubscribeEvent
     public static void onPlayerDeath(LivingDeathEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer deadPlayer)) return;
+        // 使用模式匹配简化类型检查
+        if (!(event.getEntity() instanceof ServerPlayer deadPlayer)) {
+            return;
+        }
 
-        // 通过 ServiceFallbacks 获取玩家所处比赛（支持回退）
-        Match match = ServiceFallbacks.getPlayerMatch(deadPlayer);
-        if (match == null || match.getState() != Match.MatchState.IN_PROGRESS) return;
+        // 获取玩家所在的比赛
+        var match = ServiceFallbacks.getPlayerMatch(deadPlayer);
+        if (match == null || match.getState() != Match.MatchState.IN_PROGRESS) {
+            return;
+        }
 
-         // --- 1. 手动处理物品掉落 ---
-        for (int i = 0; i < deadPlayer.getInventory().getContainerSize(); i++) {
-             ItemStack stack = deadPlayer.getInventory().getItem(i);
-             if (stack.isEmpty()) continue;
+        // 1. 处理物品掉落
+        handleItemDrops(deadPlayer);
 
-             boolean isProtected = ServerConfig.inventoryProtectedItems.stream()
-                     .anyMatch(id -> ItemNBTHelper.idMatches(stack, id));
+        // 2. 处理击杀播报和奖励
+        handleKillBroadcast(event, deadPlayer, match);
 
-             if (!isProtected) {
-                 deadPlayer.drop(stack.copy(), true, false);
-                 deadPlayer.getInventory().setItem(i, ItemStack.EMPTY);
-             }
-         }
+        // 3. 标记玩家死亡
+        match.markPlayerAsDead(deadPlayer);
+    }
 
-         // --- 2. 处理击杀播报 ---
-         DamageSource source = event.getSource();
-         Entity killerEntity = source.getEntity();
+    /**
+     * 处理死亡玩家的物品掉落
+     * 受保护的物品（如货币、护甲等）不会掉落
+     * 
+     * @param deadPlayer 死亡的玩家
+     */
+    private static void handleItemDrops(ServerPlayer deadPlayer) {
+        var inventory = deadPlayer.getInventory();
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            var stack = inventory.getItem(i);
+            if (stack.isEmpty()) {
+                continue;
+            }
 
-         if (killerEntity instanceof ServerPlayer killerPlayer && killerPlayer != deadPlayer) {
-             ItemStack weapon = killerPlayer.getMainHandItem();
-             Component deathMessage = killerPlayer.getDisplayName().copy().withStyle(ChatFormatting.AQUA)
-                     .append(Component.literal(" 使用 ").withStyle(ChatFormatting.GRAY))
-                     .append(weapon.getDisplayName().copy().withStyle(ChatFormatting.YELLOW))
-                     .append(Component.literal(" 击杀了 ").withStyle(ChatFormatting.GRAY))
-                     .append(deadPlayer.getDisplayName().copy().withStyle(ChatFormatting.RED));
-             match.broadcastToAllPlayersInMatch(deathMessage);
+            var isProtected = ServerConfig.inventoryProtectedItems.stream()
+                .anyMatch(id -> ItemNBTHelper.idMatches(stack, id));
 
-             if (match.getPlayerStats().containsKey(killerPlayer.getUUID())) {
-                 // Use ServiceFallbacks which will prefer a registered EconomyService and fall back to EconomyManager
-                 int reward = ServiceFallbacks.getRewardForKill(weapon);
-                 if (reward > 0) {
-                     ServiceFallbacks.giveMoney(killerPlayer, reward);
-                 }
+            if (!isProtected) {
+                deadPlayer.drop(stack.copy(), true, false);
+                inventory.setItem(i, ItemStack.EMPTY);
+            }
+        }
+    }
 
-                 PlayerStats killerStats = match.getPlayerStats().get(killerPlayer.getUUID());
-                 if (killerStats != null) killerStats.incrementKills();
-             }
-         } else {
-             Component deathMessage = deadPlayer.getDisplayName().copy().withStyle(ChatFormatting.RED)
-                     .append(Component.literal(" 阵亡了").withStyle(ChatFormatting.GRAY));
-             match.broadcastToAllPlayersInMatch(deathMessage);
-         }
+    /**
+     * 处理击杀播报和奖励发放
+     * 
+     * @param event 死亡事件
+     * @param deadPlayer 死亡的玩家
+     * @param match 当前比赛
+     */
+    private static void handleKillBroadcast(LivingDeathEvent event, ServerPlayer deadPlayer, Match match) {
+        var source = event.getSource();
+        var killerEntity = source.getEntity();
 
-         // --- 3. 最后再调用比赛的死亡处理逻辑 ---
-         match.markPlayerAsDead(deadPlayer);
-     }
+        // 使用模式匹配检查击杀者
+        if (killerEntity instanceof ServerPlayer killerPlayer && killerPlayer != deadPlayer) {
+            var weapon = killerPlayer.getMainHandItem();
+            
+            // 构建击杀消息
+            var deathMessage = killerPlayer.getDisplayName().copy()
+                .withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(" 使用 ").withStyle(ChatFormatting.GRAY))
+                .append(weapon.getDisplayName().copy().withStyle(ChatFormatting.YELLOW))
+                .append(Component.literal(" 击杀了 ").withStyle(ChatFormatting.GRAY))
+                .append(deadPlayer.getDisplayName().copy().withStyle(ChatFormatting.RED));
+            
+            match.broadcastToAllPlayersInMatch(deathMessage);
+
+            // 处理击杀奖励
+            if (match.getPlayerStats().containsKey(killerPlayer.getUUID())) {
+                var reward = ServiceFallbacks.getRewardForKill(weapon);
+                if (reward > 0) {
+                    ServiceFallbacks.giveMoney(killerPlayer, reward);
+                }
+
+                var killerStats = match.getPlayerStats().get(killerPlayer.getUUID());
+                if (killerStats != null) {
+                    killerStats.incrementKills();
+                }
+            }
+        } else {
+            // 非玩家击杀或自杀
+            var deathMessage = deadPlayer.getDisplayName().copy()
+                .withStyle(ChatFormatting.RED)
+                .append(Component.literal(" 阵亡了").withStyle(ChatFormatting.GRAY));
+            match.broadcastToAllPlayersInMatch(deathMessage);
+        }
+    }
 }

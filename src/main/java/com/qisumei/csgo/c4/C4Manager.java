@@ -105,13 +105,18 @@ public class C4Manager implements C4Controller {
         context.endRound("T", "炸弹已爆炸");
     }
 
+    /**
+     * 随机给一名T队玩家发放C4炸弹
+     * 使用Java 21的var简化局部变量声明
+     */
     public void giveC4ToRandomT() {
         // 保护性检查：确保 C4 物品已正确注册
-        Item c4Item = null;
+        Item c4Item;
         try {
             c4Item = QisCSGO.C4_ITEM.get();
         } catch (Throwable t) {
             QisCSGO.LOGGER.error("尝试获取 C4_ITEM 时发生异常：", t);
+            return;
         }
 
         if (c4Item == null) {
@@ -119,45 +124,62 @@ public class C4Manager implements C4Controller {
             return;
         }
 
-        List<ServerPlayer> tPlayers = context.getPlayerStats().entrySet().stream()
+        // 收集所有T队玩家
+        var tPlayers = context.getPlayerStats().entrySet().stream()
             .filter(e -> "T".equals(e.getValue().getTeam()))
             .map(e -> context.getServer().getPlayerList().getPlayer(e.getKey()))
             .filter(Objects::nonNull)
             .toList(); 
 
-        if (!tPlayers.isEmpty()) {
-            ServerPlayer playerWithC4 = tPlayers.get(new Random().nextInt(tPlayers.size()));
-            if (playerWithC4 != null) {
-                try {
-                    playerWithC4.getInventory().add(new ItemStack(c4Item));
-                    playerWithC4.sendSystemMessage(Component.literal("§e你携带了C4炸弹！").withStyle(ChatFormatting.BOLD));
-                } catch (Throwable t) {
-                    QisCSGO.LOGGER.error("给玩家发放 C4 时发生异常：", t);
-                }
-            }
+        if (tPlayers.isEmpty()) {
+            QisCSGO.LOGGER.debug("没有T队玩家可发放C4");
+            return;
+        }
+
+        // 随机选择一名玩家发放C4
+        var random = new Random();
+        var playerWithC4 = tPlayers.get(random.nextInt(tPlayers.size()));
+        
+        try {
+            playerWithC4.getInventory().add(new ItemStack(c4Item));
+            playerWithC4.sendSystemMessage(
+                Component.literal("§e你携带了C4炸弹！").withStyle(ChatFormatting.BOLD)
+            );
+        } catch (Throwable t) {
+            QisCSGO.LOGGER.error("给玩家 {} 发放 C4 时发生异常：", playerWithC4.getName().getString(), t);
         }
     }
 
+    /**
+     * 应用C4爆炸伤害到范围内的玩家
+     * 使用Java 21的var简化局部变量声明
+     * 
+     * @param c4Pos C4的位置
+     */
     private void applyCustomExplosionDamage(BlockPos c4Pos) {
-        final double explosionRadius = 16.0;
-        final float maxDamage = 100.0f;
+        final var explosionRadius = 16.0;
+        final var maxDamage = 100.0f;
 
-        double explosionX = c4Pos.getX() + 0.5;
-        double explosionY = c4Pos.getY() + 0.5;
-        double explosionZ = c4Pos.getZ() + 0.5;
+        var explosionX = c4Pos.getX() + 0.5;
+        var explosionY = c4Pos.getY() + 0.5;
+        var explosionZ = c4Pos.getZ() + 0.5;
 
-        DamageSource damageSource = context.getServer().overworld().damageSources().genericKill();
+        var damageSource = context.getServer().overworld().damageSources().genericKill();
 
-        for (UUID playerUUID : new ArrayList<>(context.getAlivePlayers())) {
-            ServerPlayer player = context.getServer().getPlayerList().getPlayer(playerUUID);
-            if (player == null || !player.isAlive()) continue;
+        // 遍历所有存活玩家，计算并应用伤害
+        for (var playerUUID : new ArrayList<>(context.getAlivePlayers())) {
+            var player = context.getServer().getPlayerList().getPlayer(playerUUID);
+            if (player == null || !player.isAlive()) {
+                continue;
+            }
 
-            double distanceSq = player.distanceToSqr(explosionX, explosionY, explosionZ);
+            var distanceSq = player.distanceToSqr(explosionX, explosionY, explosionZ);
+            var radiusSq = explosionRadius * explosionRadius;
 
-            if (distanceSq < explosionRadius * explosionRadius) {
-                double distance = Math.sqrt(distanceSq);
-                float damageFalloff = (float) (1.0 - distance / explosionRadius);
-                float damageToApply = maxDamage * damageFalloff;
+            if (distanceSq < radiusSq) {
+                var distance = Math.sqrt(distanceSq);
+                var damageFalloff = (float) (1.0 - distance / explosionRadius);
+                var damageToApply = maxDamage * damageFalloff;
 
                 if (damageToApply > 0) {
                     player.hurt(damageSource, damageToApply);
