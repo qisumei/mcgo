@@ -178,11 +178,11 @@ public class ServerConfig {
 
         // 经济系统相关配置项
         BUILDER.push("Economy");
-        PISTOL_ROUND_STARTING_MONEY_SPEC = BUILDER.comment("手枪局或换边后第一局的起始资金").defineInRange("pistolRoundStartingMoney", 8, 0, 1000);
-        WIN_REWARD_SPEC = BUILDER.comment("回合胜利基础奖励").defineInRange("winReward", 33, 0, 1000);
-        LOSS_REWARD_SPEC = BUILDER.comment("回合失败基础奖励").defineInRange("lossReward", 14, 0, 1000);
-        LOSS_STREAK_BONUS_SPEC = BUILDER.comment("每额外连败一回合的奖励").defineInRange("lossStreakBonus", 5, 0, 1000);
-        MAX_LOSS_STREAK_BONUS_SPEC = BUILDER.comment("连败奖励的上限 (不含基础失败奖励)").defineInRange("maxLossStreakBonus", 35, 0, 1000);
+        PISTOL_ROUND_STARTING_MONEY_SPEC = BUILDER.comment("手枪局或换边后第一局的起始资金").defineInRange("pistolRoundStartingMoney", 800, 0, 16000);
+        WIN_REWARD_SPEC = BUILDER.comment("回合胜利基础奖励").defineInRange("winReward", 3250, 0, 16000);
+        LOSS_REWARD_SPEC = BUILDER.comment("回合失败基础奖励").defineInRange("lossReward", 1400, 0, 16000);
+        LOSS_STREAK_BONUS_SPEC = BUILDER.comment("每额外连败一回合的奖励").defineInRange("lossStreakBonus", 500, 0, 16000);
+        MAX_LOSS_STREAK_BONUS_SPEC = BUILDER.comment("连败奖励的上限 (不含基础失败奖励)").defineInRange("maxLossStreakBonus", 3400, 0, 16000);
         BUILDER.pop();
 
         // 击杀奖励配置项

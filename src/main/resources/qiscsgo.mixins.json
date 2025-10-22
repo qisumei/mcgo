@@ -2,7 +2,8 @@
   "required": true,
   "package": "com.qisumei.csgo.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [],
+  "mixins": ["CampfireSmokeParticleMixin",
+             "ServerLevelMixin"],
   "injectors": {
     "defaultRequire": 1
   },

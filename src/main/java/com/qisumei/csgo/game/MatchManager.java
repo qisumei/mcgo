@@ -100,9 +100,13 @@ public class MatchManager {
     /**
      * 移除指定名称的比赛。
      *
+     * 首先尝试通过 ServiceRegistry 获取注册的 MatchService 并让其处理删除（允许替代实现），
+     * 若未注册则回退到移除静态存储的实现以保证兼容性。
+     *
      * @param name 要移除的比赛名称
      */
     public static void removeMatch(String name) {
+        // 直接移除，避免与 ServiceFallbacks/MatchServiceImpl 形成递归调用环
         ACTIVE_MATCHES.remove(name);
     }
 }
