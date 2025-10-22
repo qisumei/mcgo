@@ -130,6 +130,9 @@ public class Match implements MatchContext {
     
     // --- 购买限制管理器，处理购买限制逻辑 ---
     private final PurchaseLimitManager purchaseLimitManager;
+    
+    // --- 投掷物消耗追踪器，处理投掷物使用记录 ---
+    private final GrenadeConsumptionTracker grenadeConsumptionTracker;
 
 
     /**
@@ -222,6 +225,9 @@ public class Match implements MatchContext {
         
         // 初始化购买限制管理器
         this.purchaseLimitManager = new PurchaseLimitManager();
+        
+        // 初始化投掷物消耗追踪器
+        this.grenadeConsumptionTracker = new GrenadeConsumptionTracker();
     }
     
     /**
@@ -313,8 +319,9 @@ public class Match implements MatchContext {
         this.currentRound++;
         c4Manager.reset();
         
-        // 3. 重置购买限制
+        // 3. 重置购买限制和投掷物追踪
         purchaseLimitManager.resetAllPurchases();
+        grenadeConsumptionTracker.resetAllGrenades();
 
         // 4. 检查是否需要换边
         if (this.currentRound == (this.totalRounds / 2) + 1) {
@@ -517,6 +524,9 @@ public class Match implements MatchContext {
 
             // 使用新的装备槽位管理器进行清空和初始化
             InventorySlotManager.clearAndInitializeInventory(player);
+            
+            // 清空已使用的投掷物，保留未使用的
+            grenadeConsumptionTracker.clearUsedGrenadesFromInventory(player);
 
             if (isPistolRound) {
                 giveInitialGear(player, team);
@@ -1198,6 +1208,14 @@ public class Match implements MatchContext {
      */
     public EconomicBalanceManager getEconomicBalanceManager() {
         return this.economicBalanceManager;
+    }
+    
+    /**
+     * 获取投掷物消耗追踪器
+     * @return GrenadeConsumptionTracker实例
+     */
+    public GrenadeConsumptionTracker getGrenadeConsumptionTracker() {
+        return this.grenadeConsumptionTracker;
     }
 
     /**

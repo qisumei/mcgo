@@ -225,6 +225,15 @@
 - 子弹限购检测（弹夹容量×4）
 - 购买记录追踪和重置
 
+### 6.4 GrenadeConsumptionTracker
+
+投掷物消耗追踪器，负责：
+- 记录玩家投掷的投掷物
+- 追踪投掷物使用状态
+- 回合开始时清空已使用的投掷物
+- 保留未使用的投掷物
+- 提供使用详情查询
+
 ## 七、配置选项
 
 在 `config/qiscsgo-server.toml` 中配置：
@@ -280,14 +289,87 @@ CT连续3回合胜利 -> 触发动态平衡
 第4回合 -> CT方资金-10%，T方资金+10%
 ```
 
-## 九、平衡性测试建议
+**场景5：投掷物消耗**
+```
+玩家购买手雷 -> 投掷手雷 -> 记录消耗
+下回合开始 -> 已使用的手雷被清空 -> 未使用的闪光弹保留
+```
+
+**场景6：C4爆炸**
+```
+T方安放C4 -> C4倒计时 -> C4爆炸
+存活的CT玩家 -> 所有装备被清空 -> 需重新购买
+```
+
+## 九、系统集成说明
+
+### 9.1 商店系统集成
+
+商店系统应该集成PurchaseLimitManager：
+
+```java
+Match match = getCurrentMatch(player);
+PurchaseLimitManager limitManager = match.getPurchaseLimitManager();
+
+// 在允许武器购买前检查
+if (!limitManager.canPurchaseWeapon(player)) {
+    player.sendSystemMessage("本回合已购买武器，无法再次购买！");
+    return;
+}
+
+// 购买成功后记录
+limitManager.recordWeaponPurchase(player);
+```
+
+### 9.2 投掷物系统集成
+
+投掷物投掷系统应该集成GrenadeConsumptionTracker：
+
+```java
+Match match = getCurrentMatch(player);
+GrenadeConsumptionTracker tracker = match.getGrenadeConsumptionTracker();
+
+// 当投掷物被投掷时
+public void onGrenadeThrown(ServerPlayer player, ItemStack grenade) {
+    tracker.recordGrenadeThrow(player, grenade);
+    // 继续执行投掷逻辑...
+}
+
+// 追踪器将自动：
+// 1. 记录投掷的投掷物
+// 2. 下回合开始时从背包清空已使用的
+// 3. 保留未使用的投掷物
+```
+
+### 9.3 经济奖励集成
+
+击杀和任务完成应该使用EconomicBalanceManager：
+
+```java
+Match match = getCurrentMatch(player);
+EconomicBalanceManager economicManager = match.getEconomicBalanceManager();
+
+// 击杀奖励（统一300）
+economicManager.giveKillReward(killer);
+
+// C4安放奖励（800）
+economicManager.giveC4PlantReward(planter);
+
+// C4拆除奖励（800）
+economicManager.giveC4DefuseReward(defuser);
+```
+
+## 十、平衡性测试建议
 
 1. **经济曲线测试：** 记录10局游戏的资金变化曲线，确保无滚雪球现象
 2. **武器选择测试：** 统计各类武器的购买率和击杀贡献，确保平衡
 3. **动态平衡测试：** 验证连续3胜后的资金调整是否有效
 4. **死亡惩罚测试：** 确认20%惩罚不会导致经济崩溃
+5. **购买限制测试：** 验证每回合限购机制的正确性
+6. **投掷物消耗测试：** 确认投掷物消耗和保留逻辑正确
+7. **C4爆炸惩罚测试：** 验证CT装备清空是否正确触发
 
-## 十、未来扩展
+## 十一、未来扩展
 
 - [ ] 排行榜功能优化（经济与战斗数据可视化）
 - [ ] 每回合平均消费统计
