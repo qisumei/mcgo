@@ -8,6 +8,8 @@ import com.qisumei.csgo.commands.CSCommand;
 import com.qisumei.csgo.client.KeyBindings;
 import com.qisumei.csgo.network.OpenShopPacket;
 import com.qisumei.csgo.config.ServerConfig;
+import com.qisumei.csgo.entity.ModEntityTypes;
+import com.qisumei.csgo.grenade.SmokeGrenadeItem;
 import com.qisumei.csgo.service.ServiceRegistry;
 import com.qisumei.csgo.service.MatchServiceImpl;
 import com.qisumei.csgo.service.EconomyServiceImpl;
@@ -81,6 +83,7 @@ public class QisCSGO {
         modEventBus.addListener(this::onBuildCreativeModeTabContents);
         modEventBus.addListener(this::onRegisterPayloads);
         modEventBus.addListener(this::onRegisterKeyMappings);
+        ModEntityTypes.register(modEventBus);
 
         NeoForge.EVENT_BUS.addListener(this::onRegisterCommands);
     }
