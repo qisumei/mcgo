@@ -9,16 +9,6 @@ import java.util.Objects;
 
 /**
  * PlayerService 的默认实现。
- * 
- * <p>此实现采用适配器模式（Adapter Pattern），将新的服务接口适配到
- * 现有的 MatchPlayerHelper 静态工具类，以保证向后兼容性和行为一致性。</p>
- * 
- * <p>设计模式：
- * <ul>
- *   <li>适配器模式：将 MatchPlayerHelper 的静态方法适配为实例方法</li>
- *   <li>依赖注入：通过构造函数注入 ServerCommandExecutor</li>
- * </ul>
- * </p>
  */
 public final class MatchPlayerService implements PlayerService {
     private final ServerCommandExecutor commandExecutor;

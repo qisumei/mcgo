@@ -9,6 +9,7 @@ import com.qisumei.csgo.game.preset.MatchPreset;
 import com.qisumei.csgo.service.ServiceRegistry;
 import com.qisumei.csgo.server.ServerCommandExecutor;
 import com.qisumei.csgo.server.ServerCommandExecutorImpl;
+import com.qisumei.csgo.events.match.*;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -29,11 +30,7 @@ import java.util.Objects;
 
 /**
  * Match类，管理一场CSGO比赛的整个生命周期和所有核心逻辑。
- * 
- * 改进：
- * - 使用依赖注入模式降低耦合
- * - 通过 MatchContext 接口对外暴露最小 API
- * - 遵循单一职责原则，将职责委托给专门的服务类
+ * 包括比赛状态、队伍信息、地图设置、回合管理、玩家统计等。
  */
 public class Match implements MatchContext {
 
@@ -119,6 +116,15 @@ public class Match implements MatchContext {
     // --- 经济服务（可注入） ---
     private final EconomyService economyService;
 
+    // --- 事件总线，用于解耦各系统 ---
+    private final MatchEventBus eventBus;
+    
+    // --- 换边服务，处理队伍交换逻辑 ---
+    private final TeamSwapService teamSwapService;
+    
+    // --- 回合经济服务，处理经济分配逻辑 ---
+    private final RoundEconomyService roundEconomyService;
+
 
     /**
      * Match类的构造函数，用于初始化一场新的比赛。
@@ -189,6 +195,33 @@ public class Match implements MatchContext {
 
         // 初始化经济服务（优先使用 ServiceRegistry 中注册的实现）
         this.economyService = ServiceRegistry.get(EconomyService.class);
+        
+        // 初始化事件总线
+        this.eventBus = new MatchEventBus();
+        
+        // 注册经济事件处理器，根据配置选择资金清空策略
+        EconomyEventHandler.MoneyClearStrategy strategy = parseMoneyStrategy(ServerConfig.teamSwapMoneyStrategy);
+        this.eventBus.registerListener(new EconomyEventHandler(strategy));
+        
+        // 初始化换边服务
+        this.teamSwapService = new TeamSwapService(this.commandExecutor, this.playerService);
+        
+        // 初始化回合经济服务
+        this.roundEconomyService = new RoundEconomyService(
+            this.economyService != null ? this.economyService : new com.qisumei.csgo.service.EconomyServiceImpl()
+        );
+    }
+    
+    /**
+     * 解析资金清空策略配置字符串
+     */
+    private static EconomyEventHandler.MoneyClearStrategy parseMoneyStrategy(String strategyStr) {
+        try {
+            return EconomyEventHandler.MoneyClearStrategy.valueOf(strategyStr);
+        } catch (IllegalArgumentException e) {
+            QisCSGO.LOGGER.warn("无效的换边资金策略配置: {}，使用默认策略 RESET_TO_PISTOL_ROUND", strategyStr);
+            return EconomyEventHandler.MoneyClearStrategy.RESET_TO_PISTOL_ROUND;
+        }
     }
 
     /**
@@ -405,12 +438,20 @@ public class Match implements MatchContext {
 
     /**
      * 在半场时交换双方队伍。
+     * 使用事件系统解耦换边逻辑与经济系统，提高代码可维护性。
      */
     private void swapTeams() {
         broadcastToAllPlayersInMatch(Component.literal("半场换边！队伍已交换。").withStyle(ChatFormatting.YELLOW));
+        
+        // 交换比分
         int tempScore = this.ctScore;
         this.ctScore = this.tScore;
         this.tScore = tempScore;
+        
+        // 收集受影响的玩家
+        Map<UUID, ServerPlayer> affectedPlayers = new HashMap<>();
+        
+        // 更新玩家队伍信息
         for (Map.Entry<UUID, PlayerStats> entry : playerStats.entrySet()) {
             PlayerStats stats = entry.getValue();
             String oldTeam = stats.getTeam();
@@ -419,12 +460,19 @@ public class Match implements MatchContext {
             
             ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
             if (player != null) {
-                String newTeamName = "CT".equals(newTeam) ? getCtTeamName() : getTTeamName();
-                commandExecutor.executeGlobal("team leave " + player.getName().getString());
-                commandExecutor.executeGlobal("team join " + newTeamName + " " + player.getName().getString());
-                performSelectiveClear(player);
-                player.sendSystemMessage(Component.literal("你现在是 " + ("CT".equals(newTeam) ? "反恐精英 (CT)" : "恐怖分子 (T)") + " 队的一员！").withStyle(ChatFormatting.AQUA));
+                affectedPlayers.put(entry.getKey(), player);
             }
+        }
+        
+        // 使用TeamSwapService批量更新玩家队伍信息
+        teamSwapService.updatePlayersTeam(affectedPlayers, playerStats, getCtTeamName(), getTTeamName());
+        
+        // 触发换边事件，让经济系统等监听器处理资金清空等逻辑
+        // 这样实现了解耦：Match不需要知道经济系统如何处理资金
+        if (!affectedPlayers.isEmpty()) {
+            TeamSwapEvent event = new TeamSwapEvent(this, affectedPlayers, this.currentRound);
+            eventBus.fireTeamSwapEvent(event);
+            QisCSGO.LOGGER.info("比赛 '{}' 触发换边事件，影响 {} 名玩家", name, affectedPlayers.size());
         }
     }
     
@@ -566,36 +614,18 @@ public class Match implements MatchContext {
 
     /**
      * 在回合开始时为玩家发放收入。
-     * 修正：手枪局应该设置（set）而非增加（give）货币，非手枪局才是增加货币。
+     * 使用 RoundEconomyService 处理经济分配逻辑，实现解耦。
      */
     private void distributeRoundIncome() {
          boolean isPistolRound = (currentRound == 1 || currentRound == (totalRounds / 2) + 1);
 
          forEachOnlinePlayer((player, stats) -> {
             if (isPistolRound) {
-                // 手枪局设置起始资金（而非增加）
-                if (this.economyService != null) {
-                    this.economyService.setMoney(player, ServerConfig.pistolRoundStartingMoney);
-                } else {
-                    EconomyManager.setMoney(player, ServerConfig.pistolRoundStartingMoney);
-                }
-                player.sendSystemMessage(Component.literal("§6手枪局！起始资金: §e$" + ServerConfig.pistolRoundStartingMoney).withStyle(ChatFormatting.AQUA));
+                // 手枪局：使用服务设置起始资金
+                roundEconomyService.distributePistolRoundMoney(player);
             } else {
-                boolean wasWinner = stats.getTeam().equals(this.lastRoundWinner);
-                int income;
-                if (wasWinner) {
-                    income = ServerConfig.winReward;
-                    player.sendSystemMessage(Component.literal("§a回合胜利！获得 §e$" + income).withStyle(ChatFormatting.GREEN));
-                } else {
-                    int lossBonus = Math.min(stats.getConsecutiveLosses() * ServerConfig.lossStreakBonus, ServerConfig.maxLossStreakBonus);
-                    income = ServerConfig.lossReward + lossBonus;
-                    player.sendSystemMessage(Component.literal("§c回合失败。获得 §e$" + income + " §7(含连败奖励)").withStyle(ChatFormatting.RED));
-                }
-                if (this.economyService != null) {
-                    this.economyService.giveMoney(player, income);
-                } else {
-                    EconomyManager.giveMoney(player, income);
-                }
+                // 普通回合：根据上回合结果分配收入
+                roundEconomyService.distributeRoundIncome(player, stats, this.lastRoundWinner);
             }
         });
      }
@@ -1204,16 +1234,10 @@ public class Match implements MatchContext {
              }
          }
          
-         // 给获胜方玩家奖励
+         // 给获胜方玩家奖励（使用 RoundEconomyService）
          forEachOnlinePlayer((player, stats) -> {
              if (stats.getTeam().equals(winningTeam)) {
-                 int reward = ServerConfig.winReward;
-                 if (economyService != null) {
-                     economyService.giveMoney(player, reward);
-                 } else {
-                     EconomyManager.giveMoney(player, reward);
-                 }
-                 player.sendSystemMessage(Component.literal("你们赢得了本回合！获得奖励：" + reward + " 货币").withStyle(ChatFormatting.GREEN));
+                 roundEconomyService.distributeWinReward(player);
              }
          });
 
@@ -1243,4 +1267,3 @@ public class Match implements MatchContext {
          this.tickCounter = ServerConfig.roundEndSeconds * 20;
      }
 }
-
