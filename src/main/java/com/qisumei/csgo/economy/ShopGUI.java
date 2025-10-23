@@ -18,6 +18,7 @@ import net.minecraft.world.inventory.*;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.component.ItemLore;
 
 import java.util.ArrayList;
@@ -192,16 +193,22 @@ public class ShopGUI {
             if (scopeId == null) return weaponStack;
             
             try {
-                // 使用 PointBlank 的 NBT 附件系统
-                // PointBlank 武器的附件存储在 "pointblank:attachments" 标签中
-                CompoundTag tag = weaponStack.getOrCreateTag();
+                // 使用新的 DataComponents.CUSTOM_DATA 系统
+                // PointBlank 武器的附件存储在自定义数据中
+                CustomData customData = weaponStack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY);
+                CompoundTag tag = customData.copyTag();
+                
+                // 获取或创建 pointblank:attachments 标签
                 CompoundTag pbTag = tag.getCompound("pointblank:attachments");
                 
                 // 设置瞄具附件
                 pbTag.putString("scope", scopeId);
                 
+                // 将附件标签放回主标签
                 tag.put("pointblank:attachments", pbTag);
-                weaponStack.setTag(tag);
+                
+                // 更新武器的自定义数据
+                weaponStack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
                 
                 return weaponStack;
             } catch (Exception e) {
