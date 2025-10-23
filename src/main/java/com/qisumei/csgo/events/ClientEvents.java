@@ -13,7 +13,7 @@ import net.neoforged.neoforge.client.event.EntityRenderersEvent;
  * 使用 @EventBusSubscriber 注解将其自动注册到MOD事件总线上。
  * Dist.CLIENT 确保这个类只在客户端加载，避免在服务端引发崩溃。
  */
-@EventBusSubscriber(modid = QisCSGO.MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+@EventBusSubscriber(modid = QisCSGO.MODID, value = Dist.CLIENT)
 public class ClientEvents {
 
     /**
