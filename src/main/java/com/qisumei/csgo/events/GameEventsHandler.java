@@ -75,57 +75,62 @@ public class GameEventsHandler {
      */
     @SubscribeEvent
     public static void onPlayerDeath(LivingDeathEvent event) {
-        // Java 21 模式匹配 - 更简洁的类型检查和转换
-        if (!(event.getEntity() instanceof ServerPlayer deadPlayer)) return;
+        try {
+            // Java 21 模式匹配 - 更简洁的类型检查和转换
+            if (!(event.getEntity() instanceof ServerPlayer deadPlayer)) return;
 
-        // 通过 ServiceFallbacks 获取玩家所处比赛（支持回退）
-        Match match = ServiceFallbacks.getPlayerMatch(deadPlayer);
-        if (match == null || match.getState() != Match.MatchState.IN_PROGRESS) return;
+            // 通过 ServiceFallbacks 获取玩家所处比赛（支持回退）
+            Match match = ServiceFallbacks.getPlayerMatch(deadPlayer);
+            if (match == null || match.getState() != Match.MatchState.IN_PROGRESS) return;
 
-         // --- 1. 手动处理物品掉落 ---
-        for (int i = 0; i < deadPlayer.getInventory().getContainerSize(); i++) {
-             ItemStack stack = deadPlayer.getInventory().getItem(i);
-             if (stack.isEmpty()) continue;
+            // --- 1. 手动处理物品掉落 ---
+            for (int i = 0; i < deadPlayer.getInventory().getContainerSize(); i++) {
+                ItemStack stack = deadPlayer.getInventory().getItem(i);
+                if (stack.isEmpty()) continue;
 
-             boolean isProtected = ServerConfig.inventoryProtectedItems.stream()
-                     .anyMatch(id -> ItemNBTHelper.idMatches(stack, id));
+                boolean isProtected = ServerConfig.inventoryProtectedItems.stream()
+                        .anyMatch(id -> ItemNBTHelper.idMatches(stack, id));
 
-             if (!isProtected) {
-                 deadPlayer.drop(stack.copy(), true, false);
-                 deadPlayer.getInventory().setItem(i, ItemStack.EMPTY);
-             }
-         }
+                if (!isProtected) {
+                    deadPlayer.drop(stack.copy(), true, false);
+                    deadPlayer.getInventory().setItem(i, ItemStack.EMPTY);
+                }
+            }
 
-         // --- 2. 处理击杀播报 ---
-         DamageSource source = event.getSource();
-         Entity killerEntity = source.getEntity();
+            // --- 2. 处理击杀播报 ---
+            DamageSource source = event.getSource();
+            Entity killerEntity = source.getEntity();
 
-         if (killerEntity instanceof ServerPlayer killerPlayer && killerPlayer != deadPlayer) {
-             ItemStack weapon = killerPlayer.getMainHandItem();
-             Component deathMessage = killerPlayer.getDisplayName().copy().withStyle(ChatFormatting.AQUA)
-                     .append(Component.literal(" 使用 ").withStyle(ChatFormatting.GRAY))
-                     .append(weapon.getDisplayName().copy().withStyle(ChatFormatting.YELLOW))
-                     .append(Component.literal(" 击杀了 ").withStyle(ChatFormatting.GRAY))
-                     .append(deadPlayer.getDisplayName().copy().withStyle(ChatFormatting.RED));
-             match.broadcastToAllPlayersInMatch(deathMessage);
+            if (killerEntity instanceof ServerPlayer killerPlayer && killerPlayer != deadPlayer) {
+                ItemStack weapon = killerPlayer.getMainHandItem();
+                Component deathMessage = killerPlayer.getDisplayName().copy().withStyle(ChatFormatting.AQUA)
+                        .append(Component.literal(" 使用 ").withStyle(ChatFormatting.GRAY))
+                        .append(weapon.getDisplayName().copy().withStyle(ChatFormatting.YELLOW))
+                        .append(Component.literal(" 击杀了 ").withStyle(ChatFormatting.GRAY))
+                        .append(deadPlayer.getDisplayName().copy().withStyle(ChatFormatting.RED));
+                match.broadcastToAllPlayersInMatch(deathMessage);
 
-             if (match.getPlayerStats().containsKey(killerPlayer.getUUID())) {
-                 // Use ServiceFallbacks which will prefer a registered EconomyService and fall back to EconomyManager
-                 int reward = ServiceFallbacks.getRewardForKill(weapon);
-                 if (reward > 0) {
-                     ServiceFallbacks.giveMoney(killerPlayer, reward);
-                 }
+                if (match.getPlayerStats().containsKey(killerPlayer.getUUID())) {
+                    // Use ServiceFallbacks which will prefer a registered EconomyService and fall back to EconomyManager
+                    int reward = ServiceFallbacks.getRewardForKill(weapon);
+                    if (reward > 0) {
+                        ServiceFallbacks.giveMoney(killerPlayer, reward);
+                    }
 
-                 PlayerStats killerStats = match.getPlayerStats().get(killerPlayer.getUUID());
-                 if (killerStats != null) killerStats.incrementKills();
-             }
-         } else {
-             Component deathMessage = deadPlayer.getDisplayName().copy().withStyle(ChatFormatting.RED)
-                     .append(Component.literal(" 阵亡了").withStyle(ChatFormatting.GRAY));
-             match.broadcastToAllPlayersInMatch(deathMessage);
-         }
+                    PlayerStats killerStats = match.getPlayerStats().get(killerPlayer.getUUID());
+                    if (killerStats != null) killerStats.incrementKills();
+                }
+            } else {
+                Component deathMessage = deadPlayer.getDisplayName().copy().withStyle(ChatFormatting.RED)
+                        .append(Component.literal(" 阵亡了").withStyle(ChatFormatting.GRAY));
+                match.broadcastToAllPlayersInMatch(deathMessage);
+            }
 
-         // --- 3. 最后再调用比赛的死亡处理逻辑 ---
-         match.markPlayerAsDead(deadPlayer);
-     }
+            // --- 3. 最后再调用比赛的死亡处理逻辑 ---
+            match.markPlayerAsDead(deadPlayer);
+        } catch (Exception e) {
+            // Enhanced error handling with detailed logging
+            QisCSGO.LOGGER.error("处理玩家死亡事件时发生异常", e);
+        }
+    }
 }

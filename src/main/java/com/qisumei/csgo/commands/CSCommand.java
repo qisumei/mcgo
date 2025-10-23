@@ -122,9 +122,7 @@ public final class CSCommand {
             )
 
             // --- 玩家指令 ---
-            .then(Commands.literal("balance")
-                .executes(CommandHandlers::checkBalance)
-            )
+            // Note: Balance command removed - balance is shown in shop interface
 
             // --- watch 命令 ---
             .then(Commands.literal("watch")

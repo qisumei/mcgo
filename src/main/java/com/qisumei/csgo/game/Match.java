@@ -829,11 +829,15 @@ public class Match implements MatchContext {
     
     /**
      * 更新所有观察者的视角目标
+     * 优化：减少频繁切换，提升流畅度
      */
     public void updateSpectatorCameras() {
         forEachOnlinePlayer((player, stats) -> {
             if (player != null && player.isSpectator()) {
-                if (player.getCamera() == player) {
+                // 只有当前没有有效观战目标时才切换
+                Entity currentCamera = player.getCamera();
+                if (currentCamera == player || currentCamera == null || 
+                    (currentCamera instanceof ServerPlayer target && !target.isAlive())) {
                     findAndSetSpectatorTarget(player);
                 }
             }
