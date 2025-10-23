@@ -518,6 +518,9 @@ public class Match implements MatchContext {
             player.getFoodData().setFoodLevel(20);
             player.removeAllEffects();
             
+            // 回合开始时确保玩家可见
+            player.setInvisible(false);
+            
             player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, ServerConfig.buyPhaseSeconds * 20, 4, false, false, true));
 
             List<BlockPos> spawns = "CT".equals(team) ? ctSpawns : tSpawns;
@@ -790,6 +793,8 @@ public class Match implements MatchContext {
         this.checkRoundEndCondition();
         
         deadPlayer.setGameMode(GameType.SPECTATOR);
+        // 隐藏观战者，避免泄露战术信息
+        deadPlayer.setInvisible(true);
         findAndSetSpectatorTarget(deadPlayer);
         
         this.checkRoundEndCondition();
