@@ -6,6 +6,7 @@ import com.qisumei.csgo.service.ServiceFallbacks;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -126,6 +127,9 @@ public class ShopGUI {
                     EconomyManager.giveMoney(this.player, price);
                     return;
                 }
+                
+                // 为武器附加瞄具（在添加到背包之前）
+                toGive = attachScopeToWeapon(toGive, itemId);
 
                 boolean added = this.player.getInventory().add(toGive.copy());
                 if (!added) {
@@ -143,9 +147,6 @@ public class ShopGUI {
 
                 // 自动附赠一组对应口径的弹药（如果有映射）
                 giveDefaultAmmoForWeapon(this.player, itemId);
-                
-                // 为武器添加瞄具
-                addScopeToWeapon(this.player, itemId);
                 
                 // 如果是投掷物，记录购买
                 if (isThrowable(itemId)) {
@@ -183,23 +184,29 @@ public class ShopGUI {
         }
         
         /**
-         * 为武器添加瞄具（如果适用）
+         * 为武器附加瞄具（通过NBT数据）
+         * 使用 PointBlank 的附件系统，将瞄具直接附加到武器上
          */
-        private static void addScopeToWeapon(ServerPlayer player, String weaponId) {
-            // PointBlank 武器瞄具配置
+        private static ItemStack attachScopeToWeapon(ItemStack weaponStack, String weaponId) {
             String scopeId = getScopeForWeapon(weaponId);
-            if (scopeId == null) return;
+            if (scopeId == null) return weaponStack;
             
             try {
-                ResourceLocation rid = ResourceLocation.tryParse(scopeId);
-                if (rid == null) return;
-                Item scopeItem = BuiltInRegistries.ITEM.get(rid);
-                if (scopeItem == null || scopeItem == Items.AIR) return;
-                ItemStack scopeStack = new ItemStack(scopeItem);
-                if (!player.getInventory().add(scopeStack)) {
-                    player.drop(scopeStack, false);
-                }
-            } catch (Exception ignored) {
+                // 使用 PointBlank 的 NBT 附件系统
+                // PointBlank 武器的附件存储在 "pointblank:attachments" 标签中
+                CompoundTag tag = weaponStack.getOrCreateTag();
+                CompoundTag pbTag = tag.getCompound("pointblank:attachments");
+                
+                // 设置瞄具附件
+                pbTag.putString("scope", scopeId);
+                
+                tag.put("pointblank:attachments", pbTag);
+                weaponStack.setTag(tag);
+                
+                return weaponStack;
+            } catch (Exception e) {
+                QisCSGO.LOGGER.error("为武器附加瞄具失败: {}", weaponId, e);
+                return weaponStack;
             }
         }
         
