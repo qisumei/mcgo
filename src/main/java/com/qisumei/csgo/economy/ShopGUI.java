@@ -6,6 +6,7 @@ import com.qisumei.csgo.service.ServiceFallbacks;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -17,6 +18,7 @@ import net.minecraft.world.inventory.*;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.component.ItemLore;
 
 import java.util.ArrayList;
@@ -102,6 +104,18 @@ public class ShopGUI {
                     return;
                 }
 
+                // 检查是否是投掷物，如果是则检查是否已购买过
+                if (isThrowable(itemId)) {
+                    var playerMatch = ServiceFallbacks.getPlayerMatch(this.player);
+                    if (playerMatch != null) {
+                        var stats = playerMatch.getPlayerStats().get(this.player.getUUID());
+                        if (stats != null && stats.hasPurchasedThrowable(itemId)) {
+                            this.player.sendSystemMessage(Component.literal("§c该投掷物每场比赛只能购买一次！"));
+                            return;
+                        }
+                    }
+                }
+
                 if (!EconomyManager.takeMoney(this.player, price)) {
                     return;
                 }
@@ -114,6 +128,9 @@ public class ShopGUI {
                     EconomyManager.giveMoney(this.player, price);
                     return;
                 }
+                
+                // 为武器附加瞄具（在添加到背包之前）
+                toGive = attachScopeToWeapon(toGive, itemId);
 
                 boolean added = this.player.getInventory().add(toGive.copy());
                 if (!added) {
@@ -131,6 +148,17 @@ public class ShopGUI {
 
                 // 自动附赠一组对应口径的弹药（如果有映射）
                 giveDefaultAmmoForWeapon(this.player, itemId);
+                
+                // 如果是投掷物，记录购买
+                if (isThrowable(itemId)) {
+                    var playerMatch = ServiceFallbacks.getPlayerMatch(this.player);
+                    if (playerMatch != null) {
+                        var stats = playerMatch.getPlayerStats().get(this.player.getUUID());
+                        if (stats != null) {
+                            stats.addPurchasedThrowable(itemId);
+                        }
+                    }
+                }
 
                 // 购买成功反馈与刷新余额显示
                 this.player.sendSystemMessage(Component.literal("§a购买成功：").append(toGive.getHoverName()).append(Component.literal(" §7(-$" + price + ")")));
@@ -142,6 +170,65 @@ public class ShopGUI {
             }
 
             super.clicked(slotId, button, clickType, clicker);
+        }
+        
+        /**
+         * 检查物品是否为投掷物
+         */
+        private static boolean isThrowable(String itemId) {
+            return itemId != null && (
+                itemId.contains("grenade") || 
+                itemId.contains("flash") || 
+                itemId.contains("smoke") ||
+                itemId.equals("qiscsgo:smoke_grenade")
+            );
+        }
+        
+        /**
+         * 为武器附加瞄具（通过NBT数据）
+         * 使用 PointBlank 的附件系统，将瞄具直接附加到武器上
+         */
+        private static ItemStack attachScopeToWeapon(ItemStack weaponStack, String weaponId) {
+            String scopeId = getScopeForWeapon(weaponId);
+            if (scopeId == null) return weaponStack;
+            
+            try {
+                // 使用新的 DataComponents.CUSTOM_DATA 系统
+                // PointBlank 武器的附件存储在自定义数据中
+                CustomData customData = weaponStack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY);
+                CompoundTag tag = customData.copyTag();
+                
+                // 获取或创建 pointblank:attachments 标签
+                CompoundTag pbTag = tag.getCompound("pointblank:attachments");
+                
+                // 设置瞄具附件
+                pbTag.putString("scope", scopeId);
+                
+                // 将附件标签放回主标签
+                tag.put("pointblank:attachments", pbTag);
+                
+                // 更新武器的自定义数据
+                weaponStack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+                
+                return weaponStack;
+            } catch (Exception e) {
+                QisCSGO.LOGGER.error("为武器附加瞄具失败: {}", weaponId, e);
+                return weaponStack;
+            }
+        }
+        
+        /**
+         * 获取武器对应的瞄具ID
+         */
+        private static String getScopeForWeapon(String weaponId) {
+            // 为步枪和狙击枪配置瞄具
+            return switch (weaponId) {
+                case "pointblank:ak47", "pointblank:m4a1", "pointblank:aug", "pointblank:a4_sg553" -> 
+                    "pointblank:acog"; // ACOG 瞄准镜
+                case "pointblank:l96a1" -> 
+                    "pointblank:scope_x8"; // 8倍镜
+                default -> null;
+            };
         }
 
         private static ItemStack buildMoneyDisplay(ServerPlayer player) {

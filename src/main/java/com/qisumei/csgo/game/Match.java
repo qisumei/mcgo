@@ -22,6 +22,7 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 
 import java.util.*;
@@ -494,18 +495,23 @@ public class Match implements MatchContext {
             if (stats == null) continue;
 
             String team = stats.getTeam();
-            boolean wasWinner = team.equals(this.lastRoundWinner);
             boolean wasSurvivor = this.roundSurvivors.contains(playerUUID);
 
-            performSelectiveClear(player);
+            // 只有在以下情况才清空背包：
+            // 1. 手枪局（所有人都清空）
+            // 2. 非手枪局但玩家不是幸存者（死亡的玩家）
+            if (isPistolRound || !wasSurvivor) {
+                performSelectiveClear(player);
+            }
 
             if (isPistolRound) {
                 giveInitialGear(player, team);
             } else {
-                if (wasSurvivor && wasWinner) {
-                    for (ItemStack gearStack : stats.getRoundGear()) {
-                        player.getInventory().add(gearStack.copy());
-                    }
+                if (wasSurvivor) {
+                    // 幸存者保留装备（不管胜负），无需额外操作
+                    // 装备已经在背包中（因为没有清空）
+                } else {
+                    // 死亡玩家不保留装备（已被清空）
                 }
             }
             // 去重近战，避免重复给予铁剑等近战
@@ -517,6 +523,9 @@ public class Match implements MatchContext {
             player.setHealth(player.getMaxHealth());
             player.getFoodData().setFoodLevel(20);
             player.removeAllEffects();
+            
+            // 回合开始时确保玩家可见
+            player.setInvisible(false);
             
             player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, ServerConfig.buyPhaseSeconds * 20, 4, false, false, true));
 
@@ -790,6 +799,8 @@ public class Match implements MatchContext {
         this.checkRoundEndCondition();
         
         deadPlayer.setGameMode(GameType.SPECTATOR);
+        // 隐藏观战者，避免泄露战术信息
+        deadPlayer.setInvisible(true);
         findAndSetSpectatorTarget(deadPlayer);
         
         this.checkRoundEndCondition();
@@ -829,11 +840,15 @@ public class Match implements MatchContext {
     
     /**
      * 更新所有观察者的视角目标
+     * 优化：减少频繁切换，提升流畅度
      */
     public void updateSpectatorCameras() {
         forEachOnlinePlayer((player, stats) -> {
             if (player != null && player.isSpectator()) {
-                if (player.getCamera() == player) {
+                // 只有当前没有有效观战目标时才切换
+                Entity currentCamera = player.getCamera();
+                if (currentCamera == player || currentCamera == null || 
+                    (currentCamera instanceof ServerPlayer target && !target.isAlive())) {
                     findAndSetSpectatorTarget(player);
                 }
             }

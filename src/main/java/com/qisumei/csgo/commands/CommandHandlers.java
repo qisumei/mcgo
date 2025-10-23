@@ -437,6 +437,13 @@ public final class CommandHandlers {
             return 0;
         }
 
+        // 检查玩家是否已在比赛中，如果在比赛中则不允许切换观战视角
+        Match playerMatch = ServiceFallbacks.getPlayerMatch(spectator);
+        if (playerMatch != null && playerMatch.getState() == Match.MatchState.IN_PROGRESS) {
+            source.sendFailure(Component.literal("错误：游戏进行中不能使用此命令切换观战视角。"));
+            return 0;
+        }
+
         List<ServerPlayer> alivePlayers = match.getAlivePlayers().stream()
             .map(uuid -> source.getServer().getPlayerList().getPlayer(uuid))
             .filter(Objects::nonNull)

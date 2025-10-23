@@ -70,14 +70,9 @@ public class C4TickTask {
 
         ItemEntity droppedC4 = findDroppedC4();
         if (droppedC4 != null) {
-            if (c4BroadcastCooldown <= 0) {
-                c4BroadcastCooldown = 20;
-                BlockPos c4DropPos = droppedC4.blockPosition();
-                Component message = Component.literal("C4掉落在: " + c4DropPos.getX() + ", " + c4DropPos.getY() + ", " + c4DropPos.getZ()).withStyle(ChatFormatting.YELLOW);
-                context.broadcastToTeam(message, "T");
-            }
-            c4BroadcastCooldown--;
-
+            // Removed coordinate broadcast to prevent tactical information leakage
+            // Only show distance to teammates
+            
             // 【修复】创建副本避免并发修改异常（玩家可能在迭代过程中死亡）
             for (UUID playerUUID : new ArrayList<>(context.getAlivePlayers())) {
                 ServerPlayer player = context.getServer().getPlayerList().getPlayer(playerUUID);
