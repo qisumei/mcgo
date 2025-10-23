@@ -102,6 +102,18 @@ public class ShopGUI {
                     return;
                 }
 
+                // 检查是否是投掷物，如果是则检查是否已购买过
+                if (isThrowable(itemId)) {
+                    var playerMatch = ServiceFallbacks.getPlayerMatch(this.player);
+                    if (playerMatch != null) {
+                        var stats = playerMatch.getPlayerStats().get(this.player.getUUID());
+                        if (stats != null && stats.hasPurchasedThrowable(itemId)) {
+                            this.player.sendSystemMessage(Component.literal("§c该投掷物每场比赛只能购买一次！"));
+                            return;
+                        }
+                    }
+                }
+
                 if (!EconomyManager.takeMoney(this.player, price)) {
                     return;
                 }
@@ -131,6 +143,20 @@ public class ShopGUI {
 
                 // 自动附赠一组对应口径的弹药（如果有映射）
                 giveDefaultAmmoForWeapon(this.player, itemId);
+                
+                // 为武器添加瞄具
+                addScopeToWeapon(this.player, itemId);
+                
+                // 如果是投掷物，记录购买
+                if (isThrowable(itemId)) {
+                    var playerMatch = ServiceFallbacks.getPlayerMatch(this.player);
+                    if (playerMatch != null) {
+                        var stats = playerMatch.getPlayerStats().get(this.player.getUUID());
+                        if (stats != null) {
+                            stats.addPurchasedThrowable(itemId);
+                        }
+                    }
+                }
 
                 // 购买成功反馈与刷新余额显示
                 this.player.sendSystemMessage(Component.literal("§a购买成功：").append(toGive.getHoverName()).append(Component.literal(" §7(-$" + price + ")")));
@@ -142,6 +168,53 @@ public class ShopGUI {
             }
 
             super.clicked(slotId, button, clickType, clicker);
+        }
+        
+        /**
+         * 检查物品是否为投掷物
+         */
+        private static boolean isThrowable(String itemId) {
+            return itemId != null && (
+                itemId.contains("grenade") || 
+                itemId.contains("flash") || 
+                itemId.contains("smoke") ||
+                itemId.equals("qiscsgo:smoke_grenade")
+            );
+        }
+        
+        /**
+         * 为武器添加瞄具（如果适用）
+         */
+        private static void addScopeToWeapon(ServerPlayer player, String weaponId) {
+            // PointBlank 武器瞄具配置
+            String scopeId = getScopeForWeapon(weaponId);
+            if (scopeId == null) return;
+            
+            try {
+                ResourceLocation rid = ResourceLocation.tryParse(scopeId);
+                if (rid == null) return;
+                Item scopeItem = BuiltInRegistries.ITEM.get(rid);
+                if (scopeItem == null || scopeItem == Items.AIR) return;
+                ItemStack scopeStack = new ItemStack(scopeItem);
+                if (!player.getInventory().add(scopeStack)) {
+                    player.drop(scopeStack, false);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        
+        /**
+         * 获取武器对应的瞄具ID
+         */
+        private static String getScopeForWeapon(String weaponId) {
+            // 为步枪和狙击枪配置瞄具
+            return switch (weaponId) {
+                case "pointblank:ak47", "pointblank:m4a1", "pointblank:aug", "pointblank:a4_sg553" -> 
+                    "pointblank:acog"; // ACOG 瞄准镜
+                case "pointblank:l96a1" -> 
+                    "pointblank:scope_x8"; // 8倍镜
+                default -> null;
+            };
         }
 
         private static ItemStack buildMoneyDisplay(ServerPlayer player) {
