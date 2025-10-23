@@ -495,24 +495,23 @@ public class Match implements MatchContext {
             if (stats == null) continue;
 
             String team = stats.getTeam();
-            boolean wasWinner = team.equals(this.lastRoundWinner);
             boolean wasSurvivor = this.roundSurvivors.contains(playerUUID);
 
             // 只有在以下情况才清空背包：
             // 1. 手枪局（所有人都清空）
-            // 2. 非手枪局但玩家不是获胜方的幸存者
-            if (isPistolRound || !(wasSurvivor && wasWinner)) {
+            // 2. 非手枪局但玩家不是幸存者（死亡的玩家）
+            if (isPistolRound || !wasSurvivor) {
                 performSelectiveClear(player);
             }
 
             if (isPistolRound) {
                 giveInitialGear(player, team);
             } else {
-                if (wasSurvivor && wasWinner) {
-                    // 获胜方幸存者保留装备，无需额外操作
+                if (wasSurvivor) {
+                    // 幸存者保留装备（不管胜负），无需额外操作
                     // 装备已经在背包中（因为没有清空）
                 } else {
-                    // 非幸存者或失败方不保留装备（已被清空）
+                    // 死亡玩家不保留装备（已被清空）
                 }
             }
             // 去重近战，避免重复给予铁剑等近战
