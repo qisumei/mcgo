@@ -66,6 +66,11 @@ public class QisCSGO {
         BLOCKS.register(modEventBus);
         ModSounds.register(modEventBus);
 
+        // 初始化武器注册表
+        com.qisumei.csgo.weapon.WeaponRegistry.initialize();
+        LOGGER.info("武器注册表已初始化，共注册 {} 个武器", 
+            com.qisumei.csgo.weapon.WeaponRegistry.getAllWeapons().size());
+
         // 注册默认 MatchService（当前实现委托给老的 MatchManager，以保证兼容）
         MatchService previousMatch = ServiceRegistry.register(MatchService.class, new MatchServiceImpl());
         if (previousMatch != null) {

@@ -171,6 +171,7 @@ cd mcgo
 - [x] 移除余额命令 - 商店界面集成余额显示
 - [x] C4掉落优化 - 移除坐标显示、保留距离提示
 - [x] 事件处理优化 - 增强错误处理和日志记录
+- [x] **武器系统重构** - PointBlank 封装、状态管理、简化添加流程
 - [ ] 实现GUI商店的购买逻辑
 - [ ] 添加武器图标显示
 - [ ] 添加更多地图预设
@@ -189,3 +190,29 @@ cd mcgo
 ---
 
 **享受在Minecraft中的反恐精英体验！** 🎮
+
+### 🔫 武器系统（新功能）
+
+本项目使用全新重构的武器系统，将 PointBlank 武器进行了封装：
+
+**特点：**
+- 🎯 集中式武器管理 - 所有武器定义在一处
+- 🔒 类型安全 - 使用枚举和强类型
+- 🤖 自动化 - 商店自动处理武器显示和弹药分配
+- ➕ 易于扩展 - 添加新武器只需几行代码
+- 👥 队伍支持 - 内置队伍可用性检查
+
+**添加新武器示例：**
+```java
+register(new WeaponDefinition.Builder("pointblank:scar", "SCAR-H", WeaponType.RIFLE)
+    .price(28)
+    .ammoType(AmmoType.AMMO_762)
+    .addAttachment(WeaponAttachment.ACOG_SCOPE)
+    .bothTeams()
+    .build());
+```
+
+**详细文档：**
+- [如何添加新武器](docs/HOW_TO_ADD_WEAPONS.md) - 快速指南
+- [武器系统重构说明](docs/WEAPON_SYSTEM_REFACTOR.md) - 技术细节
+
