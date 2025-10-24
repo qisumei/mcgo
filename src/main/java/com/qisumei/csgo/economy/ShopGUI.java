@@ -3,6 +3,7 @@ package com.qisumei.csgo.economy;
 import com.qisumei.csgo.QisCSGO;
 import com.qisumei.csgo.game.EconomyManager;
 import com.qisumei.csgo.service.ServiceFallbacks;
+import com.qisumei.csgo.weapon.*;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -27,26 +28,9 @@ import java.util.Optional;
 
 /**
  * 商店GUI - 使用箱子界面展示可购买的物品
+ * 重构后使用 WeaponRegistry 系统管理武器
  */
 public class ShopGUI {
-
-    // 武器 -> 弹药 映射（基于 pointblank 配置常见口径）
-    private static final java.util.Map<String, String> AMMO_BY_WEAPON = new java.util.HashMap<>();
-    static {
-        AMMO_BY_WEAPON.put("pointblank:glock17", "pointblank:ammo9mm");
-        AMMO_BY_WEAPON.put("pointblank:m9", "pointblank:ammo9mm");
-        AMMO_BY_WEAPON.put("pointblank:deserteagle", "pointblank:ammo50ae");
-        AMMO_BY_WEAPON.put("pointblank:mp7", "pointblank:ammo46");
-        AMMO_BY_WEAPON.put("pointblank:ump45", "pointblank:ammo45acp");
-        AMMO_BY_WEAPON.put("pointblank:p90", "pointblank:ammo57");
-        AMMO_BY_WEAPON.put("pointblank:mp5", "pointblank:ammo9mm");
-        AMMO_BY_WEAPON.put("pointblank:vector", "pointblank:ammo45acp");
-        AMMO_BY_WEAPON.put("pointblank:ak47", "pointblank:ammo762");
-        AMMO_BY_WEAPON.put("pointblank:m4a1", "pointblank:ammo556");
-        AMMO_BY_WEAPON.put("pointblank:aug", "pointblank:ammo556");
-        AMMO_BY_WEAPON.put("pointblank:a4_sg553", "pointblank:ammo556");
-        AMMO_BY_WEAPON.put("pointblank:l96a1", "pointblank:ammo338lapua");
-    }
 
     /**
      * 打开商店GUI给玩家
@@ -120,17 +104,14 @@ public class ShopGUI {
                     return;
                 }
 
-                // 为玩家生成实际物品
-                ItemStack toGive = createItemFor(itemId);
+                // 使用武器注册表创建武器
+                ItemStack toGive = createWeaponFromRegistry(itemId);
                 if (toGive.isEmpty()) {
                     this.player.sendSystemMessage(Component.literal("§c购买失败：找不到物品 " + itemId));
                     // 退款
                     EconomyManager.giveMoney(this.player, price);
                     return;
                 }
-                
-                // 为武器附加瞄具（在添加到背包之前）
-                toGive = attachScopeToWeapon(toGive, itemId);
 
                 boolean added = this.player.getInventory().add(toGive.copy());
                 if (!added) {
@@ -146,8 +127,8 @@ public class ShopGUI {
                     }
                 }
 
-                // 自动附赠一组对应口径的弹药（如果有映射）
-                giveDefaultAmmoForWeapon(this.player, itemId);
+                // 自动附赠一组对应口径的弹药（使用武器定义）
+                giveAmmoForWeapon(this.player, itemId);
                 
                 // 如果是投掷物，记录购买
                 if (isThrowable(itemId)) {
@@ -173,62 +154,60 @@ public class ShopGUI {
         }
         
         /**
+         * 使用武器注册表创建武器
+         */
+        private static ItemStack createWeaponFromRegistry(String itemId) {
+            // 尝试从武器注册表获取武器定义
+            Optional<WeaponDefinition> weaponOpt = WeaponRegistry.getWeapon(itemId);
+            if (weaponOpt.isPresent()) {
+                return WeaponFactory.createWeapon(weaponOpt.get());
+            }
+            
+            // 如果不在注册表中，回退到直接创建物品（用于护甲等非武器物品）
+            return createItemFor(itemId);
+        }
+        
+        /**
+         * 为玩家提供武器对应的弹药
+         */
+        private static void giveAmmoForWeapon(ServerPlayer player, String weaponId) {
+            Optional<WeaponDefinition> weaponOpt = WeaponRegistry.getWeapon(weaponId);
+            if (weaponOpt.isEmpty()) {
+                return;
+            }
+            
+            WeaponDefinition weapon = weaponOpt.get();
+            if (!weapon.getAmmoType().hasAmmo()) {
+                return;
+            }
+            
+            ItemStack ammo = WeaponFactory.createAmmo(
+                weapon.getAmmoType(), 
+                weapon.getDefaultAmmoAmount()
+            );
+            
+            if (!ammo.isEmpty()) {
+                if (!player.getInventory().add(ammo)) {
+                    player.drop(ammo, false);
+                }
+            }
+        }
+        
+        /**
          * 检查物品是否为投掷物
          */
         private static boolean isThrowable(String itemId) {
+            Optional<WeaponDefinition> weaponOpt = WeaponRegistry.getWeapon(itemId);
+            if (weaponOpt.isPresent()) {
+                return weaponOpt.get().getType() == WeaponType.GRENADE;
+            }
+            // 回退到旧的检查方式
             return itemId != null && (
                 itemId.contains("grenade") || 
                 itemId.contains("flash") || 
                 itemId.contains("smoke") ||
                 itemId.equals("qiscsgo:smoke_grenade")
             );
-        }
-        
-        /**
-         * 为武器附加瞄具（通过NBT数据）
-         * 使用 PointBlank 的附件系统，将瞄具直接附加到武器上
-         */
-        private static ItemStack attachScopeToWeapon(ItemStack weaponStack, String weaponId) {
-            String scopeId = getScopeForWeapon(weaponId);
-            if (scopeId == null) return weaponStack;
-            
-            try {
-                // 使用新的 DataComponents.CUSTOM_DATA 系统
-                // PointBlank 武器的附件存储在自定义数据中
-                CustomData customData = weaponStack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY);
-                CompoundTag tag = customData.copyTag();
-                
-                // 获取或创建 pointblank:attachments 标签
-                CompoundTag pbTag = tag.getCompound("pointblank:attachments");
-                
-                // 设置瞄具附件
-                pbTag.putString("scope", scopeId);
-                
-                // 将附件标签放回主标签
-                tag.put("pointblank:attachments", pbTag);
-                
-                // 更新武器的自定义数据
-                weaponStack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
-                
-                return weaponStack;
-            } catch (Exception e) {
-                QisCSGO.LOGGER.error("为武器附加瞄具失败: {}", weaponId, e);
-                return weaponStack;
-            }
-        }
-        
-        /**
-         * 获取武器对应的瞄具ID
-         */
-        private static String getScopeForWeapon(String weaponId) {
-            // 为步枪和狙击枪配置瞄具
-            return switch (weaponId) {
-                case "pointblank:ak47", "pointblank:m4a1", "pointblank:aug", "pointblank:a4_sg553" -> 
-                    "pointblank:acog"; // ACOG 瞄准镜
-                case "pointblank:l96a1" -> 
-                    "pointblank:scope_x8"; // 8倍镜
-                default -> null;
-            };
         }
 
         private static ItemStack buildMoneyDisplay(ServerPlayer player) {
@@ -288,24 +267,6 @@ public class ShopGUI {
                 return ItemStack.EMPTY;
             }
         }
-
-        private static void giveDefaultAmmoForWeapon(ServerPlayer player, String weaponId) {
-            String ammoId = AMMO_BY_WEAPON.get(weaponId);
-            if (ammoId == null) return;
-            try {
-                ResourceLocation rid = ResourceLocation.tryParse(ammoId);
-                if (rid == null) return;
-                Item ammoItem = BuiltInRegistries.ITEM.get(rid);
-                if (ammoItem == null || ammoItem == Items.AIR) return;
-                ItemStack ammoStack = new ItemStack(ammoItem);
-                // 给一组 64 发（遵循 MC 栈上限；具体数量可在此调优）
-                ammoStack.setCount(64);
-                if (!player.getInventory().add(ammoStack)) {
-                    player.drop(ammoStack, false);
-                }
-            } catch (Exception ignored) {
-            }
-        }
     }
 
     /**
@@ -329,40 +290,67 @@ public class ShopGUI {
         private void setupShopItems(String team) {
             int slot = 0;
 
-            // 第一行：手枪（使用 pointblank 实际存在的ID）
-            addShopItem(slot++, "pointblank:glock17", "Glock-17", WeaponPrices.getPrice("pointblank:glock17"));
-            addShopItem(slot++, "pointblank:m9", "M9", WeaponPrices.getPrice("pointblank:m9"));
-            addShopItem(slot++, "pointblank:deserteagle", "沙漠之鹰", WeaponPrices.getPrice("pointblank:deserteagle"));
+            // 使用武器注册表自动填充商店
+            // 第一行：手枪
+            List<WeaponDefinition> pistols = WeaponRegistry.getWeaponsByTypeAndTeam(WeaponType.PISTOL, team);
+            for (WeaponDefinition weapon : pistols) {
+                if (slot >= 9) break;
+                addShopItemFromWeapon(slot++, weapon);
+            }
             slot = 9; // 跳到下一行
 
-            // 第二行：冲锋枪（选择实际存在的：mp7/ump45/p90/mp5/vector）
-            addShopItem(slot++, "pointblank:mp7", "MP7", WeaponPrices.getPrice("pointblank:mp7"));
-            addShopItem(slot++, "pointblank:ump45", "UMP-45", WeaponPrices.getPrice("pointblank:ump45"));
-            addShopItem(slot++, "pointblank:p90", "P90", WeaponPrices.getPrice("pointblank:p90"));
-            addShopItem(slot++, "pointblank:mp5", "MP5", WeaponPrices.getPrice("pointblank:mp5"));
-            addShopItem(slot++, "pointblank:vector", "Vector", WeaponPrices.getPrice("pointblank:vector"));
+            // 第二行：冲锋枪
+            List<WeaponDefinition> smgs = WeaponRegistry.getWeaponsByTypeAndTeam(WeaponType.SMG, team);
+            for (WeaponDefinition weapon : smgs) {
+                if (slot >= 18) break;
+                addShopItemFromWeapon(slot++, weapon);
+            }
             slot = 18; // 跳到下一行
 
-            // 第三行：步枪（使用 m4a1 / ak47 / aug / sg553(实际ID为 a4_sg553)）
-            addShopItem(slot++, "pointblank:ak47", "AK-47", WeaponPrices.getPrice("pointblank:ak47"));
-            addShopItem(slot++, "pointblank:m4a1", "M4A1", WeaponPrices.getPrice("pointblank:m4a1"));
-            addShopItem(slot++, "pointblank:aug", "AUG", WeaponPrices.getPrice("pointblank:aug"));
-            addShopItem(slot++, "pointblank:a4_sg553", "SG 553", WeaponPrices.getPrice("pointblank:a4_sg553"));
+            // 第三行：步枪
+            List<WeaponDefinition> rifles = WeaponRegistry.getWeaponsByTypeAndTeam(WeaponType.RIFLE, team);
+            for (WeaponDefinition weapon : rifles) {
+                if (slot >= 27) break;
+                addShopItemFromWeapon(slot++, weapon);
+            }
             slot = 27; // 跳到下一行
 
-            // 第四行：狙击枪（pointblank 使用 l96a1 作为 AWP 类）
-            addShopItem(slot++, "pointblank:l96a1", "L96A1", WeaponPrices.getPrice("pointblank:l96a1"));
+            // 第四行：狙击枪
+            List<WeaponDefinition> snipers = WeaponRegistry.getWeaponsByTypeAndTeam(WeaponType.SNIPER, team);
+            for (WeaponDefinition weapon : snipers) {
+                if (slot >= 36) break;
+                addShopItemFromWeapon(slot++, weapon);
+            }
             slot = 36; // 跳到下一行
 
-            // 第五行：投掷物（pointblank 只有通用 grenade）
-            addShopItem(slot++, "pointblank:grenade", "手雷", WeaponPrices.getPrice("pointblank:grenade"));
+            // 第五行：投掷物
+            List<WeaponDefinition> grenades = WeaponRegistry.getWeaponsByTypeAndTeam(WeaponType.GRENADE, team);
+            for (WeaponDefinition weapon : grenades) {
+                if (slot >= 45) break;
+                addShopItemFromWeapon(slot++, weapon);
+            }
             slot = 45; // 跳到下一行
 
-            // 第六行：护甲和工具（仅保留存在的物品；移除不存在的 defuse_kit）
-            addShopItem(slot++, "minecraft:leather_chestplate", "护甲", WeaponPrices.getPrice("minecraft:leather_chestplate"));
-            addShopItem(slot++, "minecraft:iron_chestplate", "护甲+头盔", WeaponPrices.getPrice("minecraft:iron_chestplate"));
+            // 第六行：护甲和重型武器
+            List<WeaponDefinition> heavyItems = WeaponRegistry.getWeaponsByTypeAndTeam(WeaponType.HEAVY, team);
+            for (WeaponDefinition weapon : heavyItems) {
+                if (slot >= 53) break;
+                addShopItemFromWeapon(slot++, weapon);
+            }
 
             // 底部右侧余额展示在 updateMoneyDisplay 中处理
+        }
+
+        /**
+         * 从武器定义添加商店物品
+         */
+        private void addShopItemFromWeapon(int slot, WeaponDefinition weapon) {
+            try {
+                ShopItem shopItem = com.qisumei.csgo.weapon.ShopItem.fromWeaponDefinition(weapon);
+                items[slot] = shopItem.getDisplayStack();
+            } catch (Exception e) {
+                QisCSGO.LOGGER.error("从武器定义创建商店物品失败: " + weapon.getWeaponId(), e);
+            }
         }
 
         private void addShopItem(int slot, String itemId, String displayName, int price) {
