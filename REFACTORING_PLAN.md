@@ -60,7 +60,10 @@
 
 #### 🔄 阶段二：将与平台无关的纯逻辑移动到 mcgo-core/mcgo-economy
 
-- [ ] 识别平台无关的核心业务逻辑
+- [x] 识别平台无关的核心业务逻辑
+- [x] 将 WeaponPrices 迁移到 mcgo-economy
+- [x] 定义事件接口到 mcgo-api（DomainEvent, MatchEventListener, TeamSwapEvent, RoundStartEvent）
+- [x] 定义服务接口到 mcgo-api（EconomyService, MatchService）
 - [ ] 将领域实体移至 mcgo-core
 - [ ] 将经济逻辑移至 mcgo-economy
 - [ ] 在原位置保留桥接类以维持兼容
