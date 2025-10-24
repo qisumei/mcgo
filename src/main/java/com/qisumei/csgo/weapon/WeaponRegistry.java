@@ -211,6 +211,11 @@ public class WeaponRegistry {
             .killReward(3)
             .bothTeams()
             .build());
+        register(new WeaponDefinition.Builder("qiscsgo.smoke_grenade", "烟雾弹", WeaponType.GRENADE)
+            .price(3)
+            .killReward(0)
+            .bothTeams()
+            .build());
     }
 
     /**
