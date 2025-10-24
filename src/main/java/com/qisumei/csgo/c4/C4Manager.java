@@ -107,7 +107,7 @@ public class C4Manager implements C4Controller {
 
     /**
      * 随机给一名 T 队玩家发放 C4。
-     * 改进的防御性编程：更详细的日志记录和错误处理。
+     * 改进：先检查是否已有玩家持有 C4，避免重复发放。
      */
     public void giveC4ToRandomT() {
         // 保护性检查：确保 C4 物品已正确注册
@@ -134,6 +134,19 @@ public class C4Manager implements C4Controller {
         if (tPlayers.isEmpty()) {
             QisCSGO.LOGGER.warn("没有在线的 T 队玩家可以接收 C4");
             return;
+        }
+
+        // 重复发放保护：如已有人持有 C4，则不再发放
+        for (ServerPlayer p : tPlayers) {
+            boolean hasC4 = false;
+            for (int i = 0; i < p.getInventory().getContainerSize(); i++) {
+                ItemStack s = p.getInventory().getItem(i);
+                if (!s.isEmpty() && s.is(c4Item)) { hasC4 = true; break; }
+            }
+            if (hasC4) {
+                QisCSGO.LOGGER.info("检测到玩家 {} 已持有 C4，跳过再次发放。", p.getName().getString());
+                return;
+            }
         }
 
         // 随机选择一名 T 队玩家并发放 C4
