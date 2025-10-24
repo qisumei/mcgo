@@ -1,0 +1,43 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'MCGO Server - Server-side specific functionality'
+
+group = 'com.selfabandonment.mcgo'
+version = '1.1.5'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+dependencies {
+    // BOM for version management
+    api platform(project(':mcgo-bom'))
+    
+    // Server depends on API, Core, Data, and Economy
+    api project(':mcgo-api')
+    api project(':mcgo-core')
+    api project(':mcgo-data')
+    api project(':mcgo-economy')
+    
+    // Testing dependencies
+    testImplementation libs.bundles.testing
+}
+
+// Server module handles:
+// - Server commands
+// - Permission authentication
+// - Data persistence
+// - Server-side tick
+// Platform assembly done by mcgo-platform-neoforge
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+}

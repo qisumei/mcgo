@@ -7,3 +7,42 @@ pluginManagement {
 plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
+
+// Enable version catalog
+dependencyResolutionManagement {
+    versionCatalogs {
+        libs {
+            from(files("gradle/libs.versions.toml"))
+        }
+    }
+}
+
+// Root project name
+rootProject.name = 'mcgo'
+
+// Module declarations for refactored architecture
+// Phase 1: Skeleton modules (empty initially, code will be migrated in later phases)
+
+// Build and version management modules
+include 'mcgo-bom'
+include 'mcgo-build-logic'
+
+// API and core domain modules
+include 'mcgo-api'
+include 'mcgo-core'
+
+// Domain-specific modules
+include 'mcgo-economy'
+include 'mcgo-network'
+include 'mcgo-data'
+
+// Platform binding modules
+include 'mcgo-platform-neoforge'
+
+// Client and server separation
+include 'mcgo-client'
+include 'mcgo-server'
+
+// Integration and testing
+include 'mcgo-integration-qiscsgo'
+include 'mcgo-test'

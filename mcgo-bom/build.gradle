@@ -1,0 +1,20 @@
+plugins {
+    id 'java-platform'
+}
+
+description = 'MCGO Bill of Materials - Centralized dependency version management'
+
+javaPlatform {
+    allowDependencies()
+}
+
+dependencies {
+    // Constraint definitions for version management across all modules
+    // This ensures all modules use consistent dependency versions
+    constraints {
+        // Testing dependencies
+        api libs.junit.jupiter
+        api libs.mockito.core
+        api libs.assertj.core
+    }
+}

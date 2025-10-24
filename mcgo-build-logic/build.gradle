@@ -1,0 +1,24 @@
+plugins {
+    id 'java-gradle-plugin'
+}
+
+description = 'MCGO Build Logic - Custom Gradle convention plugins for build configuration'
+
+group = 'com.selfabandonment.mcgo.build'
+
+// This module will contain custom Gradle plugins to enforce
+// code style, compilation options, test conventions, etc.
+// Examples: ErrorProne, SpotBugs, Spotless configuration
+
+gradlePlugin {
+    plugins {
+        mcgoJavaConventions {
+            id = 'mcgo.java-conventions'
+            implementationClass = 'com.selfabandonment.mcgo.build.JavaConventionsPlugin'
+        }
+        mcgoTestConventions {
+            id = 'mcgo.test-conventions'
+            implementationClass = 'com.selfabandonment.mcgo.build.TestConventionsPlugin'
+        }
+    }
+}

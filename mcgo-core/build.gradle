@@ -1,0 +1,37 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'MCGO Core - Pure Java domain implementation (platform-independent)'
+
+group = 'com.selfabandonment.mcgo'
+version = '1.1.5'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+dependencies {
+    // BOM for version management
+    api platform(project(':mcgo-bom'))
+    
+    // Core depends only on API
+    api project(':mcgo-api')
+    
+    // Testing dependencies
+    testImplementation libs.bundles.testing
+}
+
+// Core module must have zero external dependencies
+// No NeoForge, no Minecraft classes
+// Pure Java domain logic: matches, maps, items, rules, matching, cooldowns, scoring
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+}

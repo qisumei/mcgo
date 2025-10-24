@@ -1,0 +1,50 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'MCGO Test - End-to-end and integration testing'
+
+group = 'com.selfabandonment.mcgo'
+version = '1.1.5'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+dependencies {
+    // BOM for version management
+    api platform(project(':mcgo-bom'))
+    
+    // Test module has access to all modules for integration testing
+    testImplementation project(':mcgo-api')
+    testImplementation project(':mcgo-core')
+    testImplementation project(':mcgo-economy')
+    testImplementation project(':mcgo-network')
+    testImplementation project(':mcgo-data')
+    testImplementation project(':mcgo-client')
+    testImplementation project(':mcgo-server')
+    
+    // Testing dependencies
+    testImplementation libs.bundles.testing
+    
+    // Additional testing tools could be added:
+    // - JUnitPioneer for advanced JUnit features
+    // - Testcontainers for containerized testing
+    // - JMH for benchmarking
+}
+
+// Test module provides:
+// - End-to-end tests
+// - Platform integration tests
+// - Benchmark tests
+// - Run via :run environment or dedicated server scripts
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+}

@@ -1,0 +1,40 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'MCGO Network - Abstract network messaging, serialization, version negotiation'
+
+group = 'com.selfabandonment.mcgo'
+version = '1.1.5'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+dependencies {
+    // BOM for version management
+    api platform(project(':mcgo-bom'))
+    
+    // Network depends only on API
+    api project(':mcgo-api')
+    
+    // Testing dependencies
+    testImplementation libs.bundles.testing
+}
+
+// Network module defines:
+// - Message and DTO definitions
+// - Codec interfaces
+// - Handler interfaces
+// - Version negotiation protocols
+// Platform binding is implemented in adapter layer
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+}

@@ -1,0 +1,41 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'MCGO Economy - Economic subdomain (wallet, currency, pricing, rewards)'
+
+group = 'com.selfabandonment.mcgo'
+version = '1.1.5'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+dependencies {
+    // BOM for version management
+    api platform(project(':mcgo-bom'))
+    
+    // Economy depends on API and Core
+    api project(':mcgo-api')
+    api project(':mcgo-core')
+    
+    // Testing dependencies
+    testImplementation libs.bundles.testing
+}
+
+// Economy module implements:
+// - Wallet and currency management
+// - Pricing strategies
+// - Settlement strategies
+// - Reward policies
+// References: docs/ECONOMY_BALANCE_ANALYSIS.md
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+}

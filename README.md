@@ -141,6 +141,24 @@ killRewardAwp = 100               # AWP击杀奖励
 - **Java 21** - 开发语言
 - **Gradle** 8.x - 构建工具
 
+### 架构
+
+项目采用**多模块架构**，遵循端口-适配器模式和领域驱动设计。详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
+#### 核心模块
+- **mcgo-api** - 公共 API 接口
+- **mcgo-core** - 纯 Java 核心业务逻辑
+- **mcgo-economy** - 经济系统
+- **mcgo-network** - 网络通信抽象
+- **mcgo-data** - 数据持久化
+- **mcgo-platform-neoforge** - NeoForge 平台绑定
+- **mcgo-client** - 客户端专属
+- **mcgo-server** - 服务端专属
+
+详细架构说明请参考 [架构文档](docs/ARCHITECTURE.md)。
+
+### 原有模块（待迁移）
+
 ### 主要模块
 - **比赛系统** (`game/`) - 核心比赛逻辑
 - **经济系统** (`economy/`) - 虚拟货币和商店
@@ -158,8 +176,8 @@ cd mcgo
 ./gradlew build
 
 # 运行开发环境
-./gradlew runClient  # 客户端
-./gradlew runServer  # 服务器
+./gradlew :mcgo-platform-neoforge:runClient  # 客户端
+./gradlew :mcgo-platform-neoforge:runServer  # 服务器
 ```
 
 ## 🤝 贡献

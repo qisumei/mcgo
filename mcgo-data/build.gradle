@@ -1,0 +1,40 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'MCGO Data - Persistence adapters (NBT, JSON, SQLite)'
+
+group = 'com.selfabandonment.mcgo'
+version = '1.1.5'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+dependencies {
+    // BOM for version management
+    api platform(project(':mcgo-bom'))
+    
+    // Data depends on API and Core
+    api project(':mcgo-api')
+    api project(':mcgo-core')
+    
+    // Testing dependencies
+    testImplementation libs.bundles.testing
+}
+
+// Data module implements ports-adapters pattern:
+// - Repository interfaces defined in mcgo-api/mcgo-core
+// - Concrete implementations here (NBT, JSON, SQLite)
+// - UnitOfWork and TransactionBoundary abstractions
+// - Can be split into sub-packages: data-nbt, data-json, data-sql
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+test {
+    useJUnitPlatform()
+}

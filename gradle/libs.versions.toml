@@ -1,0 +1,43 @@
+# Version catalog for MCGO project
+# Centralizes all dependency versions for consistency across modules
+
+[versions]
+# Minecraft and NeoForge
+minecraft = "1.21.1"
+neo = "21.1.192"
+parchment = "2024.11.17"
+
+# Java
+java = "21"
+
+# Build plugins
+neoforge-moddev = "2.0.115"
+foojay-resolver = "1.0.0"
+
+# Testing
+junit = "5.10.2"
+mockito = "5.11.0"
+assertj = "3.25.3"
+
+# Quality tools
+spotless = "6.25.0"
+errorprone = "3.1.0"
+spotbugs = "6.0.7"
+
+[libraries]
+# Testing libraries
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-platform = { module = "org.junit.platform:junit-platform-launcher" }
+mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
+mockito-junit = { module = "org.mockito:mockito-junit-jupiter", version.ref = "mockito" }
+assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+
+[plugins]
+# Build plugins
+neoforge-moddev = { id = "net.neoforged.moddev", version.ref = "neoforge-moddev" }
+foojay-resolver = { id = "org.gradle.toolchains.foojay-resolver-convention", version.ref = "foojay-resolver" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+
+[bundles]
+# Bundle definitions for common dependency sets
+testing = ["junit-jupiter", "junit-platform", "mockito-core", "mockito-junit", "assertj-core"]

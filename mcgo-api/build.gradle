@@ -1,0 +1,30 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'MCGO API - Public interfaces, DTOs, SPIs and contracts'
+
+group = 'com.selfabandonment.mcgo'
+version = '1.1.5'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+dependencies {
+    // BOM for version management
+    api platform(project(':mcgo-bom'))
+    
+    // API module has minimal dependencies
+    // Only interfaces, DTOs, constants, error codes
+    // No platform-specific or implementation dependencies
+}
+
+// API stability checking could be added here with japicmp or revapi
+// to ensure binary compatibility across versions
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
