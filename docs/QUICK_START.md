@@ -1,10 +1,21 @@
 # 快速开始指南
 
+## 项目架构
+
+MCGO 采用多模块架构，详见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
+### 模块概览
+- **mcgo-platform-neoforge**: 主模块，包含 NeoForge 平台绑定
+- **mcgo-core**: 核心业务逻辑（纯 Java）
+- **mcgo-api**: 公共 API 接口
+- **其他模块**: economy, network, data, client, server 等
+
 ## 构建项目
 
 ### 前置要求
-- Java 21 或更高版本
-- 网络连接（用于下载依赖）
+- **Java 21** 或更高版本
+- **Gradle** 9.x（项目已包含 Gradle Wrapper）
+- **网络连接**（用于下载依赖）
 
 ### 构建命令
 ```bash
@@ -12,14 +23,34 @@
 git clone https://github.com/qisumei/mcgo.git
 cd mcgo
 
-# 构建项目
+# 构建所有模块
 ./gradlew build
 
-# 运行服务器
-./gradlew runServer
+# 仅构建平台模块
+./gradlew :mcgo-platform-neoforge:build
 
-# 运行客户端
-./gradlew runClient
+# 运行服务器（使用平台模块）
+./gradlew :mcgo-platform-neoforge:runServer
+
+# 运行客户端（使用平台模块）
+./gradlew :mcgo-platform-neoforge:runClient
+```
+
+### 开发模式
+
+```bash
+# 清理构建
+./gradlew clean
+
+# 构建特定模块
+./gradlew :mcgo-core:build
+./gradlew :mcgo-api:build
+
+# 运行所有测试
+./gradlew test
+
+# 运行特定模块测试
+./gradlew :mcgo-core:test
 ```
 
 ## 配置换边资金策略
@@ -171,18 +202,46 @@ public class MyHandler implements MatchEventListener {
 
 ## 更多文档
 
+### 架构与设计
+- [架构文档](ARCHITECTURE.md) - 完整的多模块架构说明
+- [贡献指南](CONTRIBUTING.md) - 如何参与开发
+- [架构决策记录](ADR/) - 重要架构决策的记录
+- [重构计划](../REFACTORING_PLAN.md) - 重构进度追踪
+
+### 专题文档
 - [经济平衡性分析](ECONOMY_BALANCE_ANALYSIS.md) - 详细的经济系统分析
-- [Match解耦设计](MATCH_DECOUPLING.md) - 架构设计说明
-- [项目总结](PROJECT_SUMMARY.md) - 完整的项目总结
-- [验证报告](../VALIDATION_REPORT.txt) - 代码验证报告
+- [Match解耦设计](MATCH_DECOUPLING.md) - 架构设计说明（如果存在）
+- [项目总结](PROJECT_SUMMARY.md) - 完整的项目总结（如果存在）
+
+## 模块开发
+
+### 添加新模块
+
+如果需要添加新的功能模块：
+
+1. 在 `settings.gradle` 中声明模块
+2. 创建模块目录和 `build.gradle`
+3. 定义模块依赖关系
+4. 实现模块功能
+5. 添加模块文档和测试
+
+参考现有模块结构进行开发。
+
+### 模块间通信
+
+- **通过 API**: 所有跨模块通信应通过 `mcgo-api` 定义的接口
+- **事件驱动**: 使用事件总线进行解耦通信
+- **依赖注入**: 通过构造器或服务注册表注入依赖
 
 ## 获取帮助
 
-- 查看源码注释
-- 阅读相关文档
-- 在 GitHub 上提交 Issue
+- 查看 [架构文档](ARCHITECTURE.md)
+- 阅读 [贡献指南](CONTRIBUTING.md)
+- 查看源码注释和 Javadoc
+- 在 GitHub 上提交 Issue 或 Discussion
 
 ---
 
-**版本**: 1.0  
-**最后更新**: 2024年
+**版本**: 2.0  
+**最后更新**: 2024-10  
+**架构版本**: 多模块架构 v1.0
