@@ -18,6 +18,11 @@ version = mod_version
 group = mod_group_id
 
 repositories {
+    mavenCentral()
+    maven {
+        name = 'NeoForged'
+        url = 'https://maven.neoforged.net/releases'
+    }
     // Add here additional repositories if required by some of the dependencies below.
 }
 
