@@ -188,34 +188,34 @@ public class ServerConfig {
         BUILDER.push("Economy");
         PISTOL_ROUND_STARTING_MONEY_SPEC = BUILDER.comment(
             "手枪局或换边后第一局的起始资金",
-            "当前默认值: 800",
+            "当前默认值: 8",
             "平衡性建议: 考虑降低到 8-10 以匹配缩减后的武器价格（见 docs/ECONOMY_BALANCE_ANALYSIS.md）",
             "如需更紧张的经济体验，推荐值: 8"
-        ).defineInRange("pistolRoundStartingMoney", 800, 0, 16000);
+        ).defineInRange("pistolRoundStartingMoney", 8, 0, 32);
         WIN_REWARD_SPEC = BUILDER.comment(
             "回合胜利基础奖励",
-            "当前默认值: 3250",
-            "平衡性建议: 考虑降低到 32 以匹配缩减后的武器价格",
-            "如需更紧张的经济体验，推荐值: 32"
-        ).defineInRange("winReward", 3250, 0, 16000);
+            "当前默认值: 16",
+            "平衡性建议: 考虑降低到 16 以匹配缩减后的武器价格",
+            "如需更紧张的经济体验，推荐值: 16"
+        ).defineInRange("winReward", 16, 0, 32);
         LOSS_REWARD_SPEC = BUILDER.comment(
             "回合失败基础奖励",
-            "当前默认值: 1400",
+            "当前默认值: 8",
             "平衡性建议: 考虑降低到 14 以匹配缩减后的武器价格",
             "如需更紧张的经济体验，推荐值: 14"
-        ).defineInRange("lossReward", 1400, 0, 16000);
+        ).defineInRange("lossReward", 8, 0, 32);
         LOSS_STREAK_BONUS_SPEC = BUILDER.comment(
             "每额外连败一回合的奖励",
-            "当前默认值: 500",
+            "当前默认值: 3",
             "平衡性建议: 考虑降低到 5 以匹配缩减后的武器价格",
             "如需更紧张的经济体验，推荐值: 5"
-        ).defineInRange("lossStreakBonus", 500, 0, 16000);
+        ).defineInRange("lossStreakBonus", 4, 0, 6);
         MAX_LOSS_STREAK_BONUS_SPEC = BUILDER.comment(
             "连败奖励的上限 (不含基础失败奖励)",
-            "当前默认值: 3400",
+            "当前默认值: 16",
             "平衡性建议: 考虑降低到 34 以匹配缩减后的武器价格",
             "如需更紧张的经济体验，推荐值: 34"
-        ).defineInRange("maxLossStreakBonus", 3400, 0, 16000);
+        ).defineInRange("maxLossStreakBonus", 16, 0, 16);
         TEAM_SWAP_MONEY_STRATEGY_SPEC = BUILDER.comment(
             "换边时的资金清空策略",
             "可选值: CLEAR_ALL（清空所有资金）, CLEAR_TEMPORARY_ONLY（仅清空临时资金，保留基础资金）,",
@@ -225,13 +225,13 @@ public class ServerConfig {
 
         // 击杀奖励配置项
         BUILDER.push("Kill Rewards");
-        KILL_REWARD_KNIFE_SPEC = BUILDER.defineInRange("knife", 15, 0, 1000);
-        KILL_REWARD_PISTOL_SPEC = BUILDER.defineInRange("pistol", 3, 0, 1000);
-        KILL_REWARD_SMG_SPEC = BUILDER.defineInRange("smg", 6, 0, 1000);
-        KILL_REWARD_HEAVY_SPEC = BUILDER.defineInRange("heavy", 3, 0, 1000);
-        KILL_REWARD_RIFLE_SPEC = BUILDER.defineInRange("rifle", 3, 0, 1000);
-        KILL_REWARD_AWP_SPEC = BUILDER.defineInRange("awp", 1, 0, 1000);
-        KILL_REWARD_GRENADE_SPEC = BUILDER.defineInRange("grenade", 3, 0, 1000);
+        KILL_REWARD_KNIFE_SPEC = BUILDER.defineInRange("knife", 10, 0, 15);
+        KILL_REWARD_PISTOL_SPEC = BUILDER.defineInRange("pistol", 3, 0, 3);
+        KILL_REWARD_SMG_SPEC = BUILDER.defineInRange("smg", 6, 0, 6);
+        KILL_REWARD_HEAVY_SPEC = BUILDER.defineInRange("heavy", 3, 0, 3);
+        KILL_REWARD_RIFLE_SPEC = BUILDER.defineInRange("rifle", 3, 0, 3);
+        KILL_REWARD_AWP_SPEC = BUILDER.defineInRange("awp", 1, 0, 1);
+        KILL_REWARD_GRENADE_SPEC = BUILDER.defineInRange("grenade", 3, 0, 3);
         BUILDER.pop();
 
         // 初始装备配置项
