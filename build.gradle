@@ -117,6 +117,10 @@ configurations {
 }
 
 dependencies {
+    // Phase 2: Add dependencies to new modules for backward compatibility
+    // The root project (original monolith) now depends on refactored modules
+    implementation project(':mcgo-economy')
+    
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
