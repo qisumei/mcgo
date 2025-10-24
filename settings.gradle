@@ -8,17 +8,10 @@ plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
-// Enable version catalog
-dependencyResolutionManagement {
-    versionCatalogs {
-        libs {
-            from(files("gradle/libs.versions.toml"))
-        }
-    }
-}
-
 // Root project name
 rootProject.name = 'mcgo'
+
+// Version catalog is automatically detected from gradle/libs.versions.toml in Gradle 9.1.0+
 
 // Module declarations for refactored architecture
 // Phase 1: Skeleton modules (empty initially, code will be migrated in later phases)

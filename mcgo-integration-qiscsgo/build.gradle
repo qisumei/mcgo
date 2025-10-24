@@ -7,6 +7,10 @@ description = 'MCGO Integration QisCSGO - Integration adapter for qiscsgo-1.1.5.
 group = 'com.selfabandonment.mcgo'
 version = '1.1.5'
 
+repositories {
+    mavenCentral()
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
