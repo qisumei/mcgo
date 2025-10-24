@@ -290,4 +290,3 @@ public class ServerConfig {
         teamSwapMoneyStrategy = TEAM_SWAP_MONEY_STRATEGY_SPEC.get();
     }
 }
-
