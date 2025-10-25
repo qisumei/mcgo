@@ -4,10 +4,10 @@
 
 ### 新增功能
 - **单元测试框架**: 建立完整的JUnit 5测试基础设施
-  - 57个单元测试覆盖核心类
+  - 49个单元测试覆盖核心类
   - WeaponRegistry: 14个测试，~90%覆盖率
   - WeaponDefinition: 14个测试，~85%覆盖率
-  - MatchPlayerService: 10个测试，~30%覆盖率（受Minecraft依赖限制）
+  - MatchPlayerService: 2个测试，~10%覆盖率（极度受Minecraft依赖限制）
   - VirtualMoneyManager: 3个测试，~20%覆盖率（受Minecraft依赖限制）
 
 ### 改进

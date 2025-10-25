@@ -29,9 +29,9 @@
 | VirtualMoneyManager | 3 | ~20% | ⚠️ 最小化（Minecraft依赖限制） |
 | WeaponRegistry | 14 | ~90% | ✅ 完成 |
 | WeaponDefinition | 14 | ~85% | ✅ 完成 |
-| MatchPlayerService | 10 | ~30% | ⚠️ 参数验证（Minecraft依赖限制） |
+| MatchPlayerService | 2 | ~10% | ⚠️ 构造函数验证（极度受Minecraft依赖限制） |
 
-**总计**: **57个单元测试**（2025-10-25更新）
+**总计**: **49个单元测试**（2025-10-25更新，修复编译问题）
 
 **测试框架**: JUnit 5.10.1 + 手动Mock实现
 

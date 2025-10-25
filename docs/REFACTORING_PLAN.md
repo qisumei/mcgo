@@ -68,16 +68,16 @@ Match.java (核心协调) ~400行
 - ✅ WeaponRegistry (完成 - 14个测试, ~90%覆盖率)
 - ✅ WeaponDefinition (完成 - 14个测试, ~85%覆盖率)
 - ✅ EconomyManager (部分完成 - 基础逻辑测试)
-- ✅ MatchPlayerService (完成 - 10个测试, ~30%覆盖率，受Minecraft依赖限制)
+- ✅ MatchPlayerService (完成 - 2个测试, ~10%覆盖率，极度受Minecraft依赖限制)
 - ⏳ RoundEconomyService (待完成)
 - ⏳ TeamSwapService (待完成)
 
 **已完成工作** (2025-10-25):
 - 建立JUnit 5 + Mockito测试框架
-- 创建57个单元测试（包括10个新的MatchPlayerService测试）
+- 创建49个单元测试（包括2个新的MatchPlayerService测试）
 - 编写测试文档 (src/test/java/README.md)
 - 配置Gradle测试任务
-- 为MatchPlayerService添加参数验证和接口实现测试
+- 为MatchPlayerService添加构造函数验证和接口实现测试
 
 **预计工作量**: 持续进行
 

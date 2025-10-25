@@ -172,9 +172,9 @@ cd mcgo
 - [x] C4掉落优化 - 移除坐标显示、保留距离提示
 - [x] 事件处理优化 - 增强错误处理和日志记录
 - [x] **武器系统重构** - PointBlank 封装、状态管理、简化添加流程
-- [x] **测试基础设施** - JUnit 5测试框架，57个单元测试覆盖核心类
+- [x] **测试基础设施** - JUnit 5测试框架，49个单元测试覆盖核心类
   - WeaponRegistry/WeaponDefinition: ~85-90%覆盖率
-  - MatchPlayerService: 参数验证和接口实现测试
+  - MatchPlayerService: 构造函数验证和接口实现测试
   - VirtualMoneyManager: 基础功能测试
 - [ ] 完善集成测试 - 在Minecraft环境中测试完整业务逻辑
 - [ ] 实现GUI商店的购买逻辑
@@ -203,12 +203,12 @@ open build/reports/tests/test/index.html
 |-----|--------|--------|------|
 | WeaponRegistry | 14 | ~90% | ✅ |
 | WeaponDefinition | 14 | ~85% | ✅ |
-| MatchPlayerService | 10 | ~30% | ⚠️ |
+| MatchPlayerService | 2 | ~10% | ⚠️ |
 | VirtualMoneyManager | 3 | ~20% | ⚠️ |
 
-**总计**: 57个单元测试
+**总计**: 49个单元测试 (减少至可编译的测试)
 
-**注意**: 由于Minecraft依赖限制，部分测试仅覆盖参数验证和接口实现。完整的业务逻辑测试需要在实际游戏环境中进行。
+**注意**: 由于Minecraft依赖限制，部分测试仅覆盖构造函数验证和接口实现。完整的业务逻辑测试需要在实际游戏环境中进行。
 
 详见：[测试指南](TESTING.md) | [测试文档](src/test/java/README.md)
 

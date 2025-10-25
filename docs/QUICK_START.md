@@ -133,10 +133,10 @@ start build/reports/tests/test/index.html  # Windows
 |-----|--------|--------|------|
 | WeaponRegistry | 14 | ~90% | ✅ 完整覆盖 |
 | WeaponDefinition | 14 | ~85% | ✅ 完整覆盖 |
-| MatchPlayerService | 10 | ~30% | ⚠️ 参数验证 |
+| MatchPlayerService | 2 | ~10% | ⚠️ 构造函数验证 |
 | VirtualMoneyManager | 3 | ~20% | ⚠️ 基础功能 |
 
-**总计**: 57个单元测试
+**总计**: 49个单元测试
 
 ### 编写测试
 

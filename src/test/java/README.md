@@ -84,15 +84,14 @@ src/test/java/com/qisumei/csgo/
 - 或使用专门的Minecraft mod测试框架
 
 ### 5. MatchPlayerServiceTest
-**覆盖率目标**: ~30% (极度受限于Minecraft依赖)
+**覆盖率目标**: ~10% (极度受限于Minecraft依赖)
 
 测试内容：
 - ✅ 构造函数参数验证（null检查）
-- ✅ 方法参数验证（null检查）
 - ✅ PlayerService接口实现验证
-- ✅ 方法签名存在性验证
 
 **限制**：
+- ServerCommandExecutor接口引用了Minecraft的ServerPlayer类，无法在测试中Mock
 - MatchPlayerService的所有业务逻辑方法都需要ServerPlayer对象
 - ServerConfig依赖NeoForge的ModConfigSpec类
 - ItemNBTHelper依赖Minecraft的ItemStack和Registry
@@ -100,8 +99,8 @@ src/test/java/com/qisumei/csgo/
 - 完整功能测试必须在Minecraft环境中进行
 
 **测试策略**：
-- 单元测试：仅测试不依赖Minecraft的逻辑（参数验证、接口实现）
-- 集成测试：在Minecraft环境中测试所有业务逻辑
+- 单元测试：仅测试不依赖Minecraft的逻辑（构造函数验证、接口实现）
+- 集成测试：在Minecraft环境中测试所有业务逻辑（参数验证、背包操作、装备发放等）
 
 ## 运行测试
 
@@ -134,14 +133,14 @@ src/test/java/com/qisumei/csgo/
 - [x] WeaponRegistry - ~90% 覆盖  
 - [x] WeaponDefinition - ~85% 覆盖
 - [x] EconomyManager - ~40% 覆盖（受Minecraft依赖限制）
-- [x] MatchPlayerService - ~30% 覆盖（受Minecraft依赖限制）
+- [x] MatchPlayerService - ~10% 覆盖（极度受Minecraft依赖限制）
 
 ### 未来测试计划
 
 根据 [REFACTORING_PLAN.md](../../../docs/REFACTORING_PLAN.md)：
 
 #### 下一批测试（优先级：高）
-- [x] MatchPlayerService 测试（基础测试已完成）
+- [x] MatchPlayerService 测试（基础测试已完成 - 2个测试）
 - [ ] RoundEconomyService 测试
 - [ ] TeamSwapService 测试
 
