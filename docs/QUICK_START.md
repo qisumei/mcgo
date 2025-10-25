@@ -107,10 +107,62 @@ public class MyHandler implements MatchEventListener {
 
 ## 测试
 
-### 运行测试
+### 运行单元测试
 ```bash
+# 运行所有测试
 ./gradlew test
+
+# 运行特定测试类
+./gradlew test --tests WeaponRegistryTest
+./gradlew test --tests MatchPlayerServiceTest
+
+# 持续测试模式（文件改变时自动运行）
+./gradlew test --continuous
+
+# 查看测试报告
+open build/reports/tests/test/index.html  # macOS
+xdg-open build/reports/tests/test/index.html  # Linux
+start build/reports/tests/test/index.html  # Windows
 ```
+
+### 测试覆盖率
+
+当前测试状态：
+
+| 组件 | 测试数 | 覆盖率 | 说明 |
+|-----|--------|--------|------|
+| WeaponRegistry | 14 | ~90% | ✅ 完整覆盖 |
+| WeaponDefinition | 14 | ~85% | ✅ 完整覆盖 |
+| MatchPlayerService | 10 | ~30% | ⚠️ 参数验证 |
+| VirtualMoneyManager | 3 | ~20% | ⚠️ 基础功能 |
+
+**总计**: 57个单元测试
+
+### 编写测试
+
+遵循AAA模式和中文DisplayName：
+
+```java
+@Test
+@DisplayName("应该正确注册新武器")
+void testRegisterWeapon() {
+    // Arrange - 准备
+    WeaponDefinition weapon = new WeaponDefinition.Builder(...)
+        .price(30)
+        .build();
+    
+    // Act - 执行
+    WeaponRegistry.register(weapon);
+    
+    // Assert - 验证
+    assertTrue(WeaponRegistry.getWeapon("test:weapon").isPresent());
+}
+```
+
+详细指南：
+- [测试指南](../TESTING.md) - 基础测试文档
+- [测试策略](TESTING_STRATEGY.md) - 详细的测试策略和最佳实践
+- [测试详细文档](../src/test/java/README.md) - 测试框架使用
 
 ### 手动测试清单
 
@@ -171,10 +223,22 @@ public class MyHandler implements MatchEventListener {
 
 ## 更多文档
 
+### 核心文档
+- [项目架构](ARCHITECTURE.md) - 完整的系统架构说明
+- [重构计划](REFACTORING_PLAN.md) - 技术债务和改进计划
+
+### 功能文档
 - [经济平衡性分析](ECONOMY_BALANCE_ANALYSIS.md) - 详细的经济系统分析
-- [Match解耦设计](MATCH_DECOUPLING.md) - 架构设计说明
-- [项目总结](PROJECT_SUMMARY.md) - 完整的项目总结
-- [验证报告](../VALIDATION_REPORT.txt) - 代码验证报告
+- [武器系统重构](WEAPON_SYSTEM_REFACTOR.md) - 武器系统技术细节
+- [如何添加武器](HOW_TO_ADD_WEAPONS.md) - 添加新武器的快速指南
+
+### 测试文档
+- [测试指南](../TESTING.md) - 基础测试运行和编写
+- [测试策略](TESTING_STRATEGY.md) - 详细的测试策略和最佳实践
+- [测试详细文档](../src/test/java/README.md) - 测试框架使用指南
+
+### 变更记录
+- [更新日志](CHANGELOG.md) - 项目变更历史
 
 ## 获取帮助
 
