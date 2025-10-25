@@ -576,7 +576,7 @@ public class Match implements MatchContext {
      * @param team 玩家所属队伍。
      */
     private void giveInitialGear(ServerPlayer player, String team) {
-        // 使用已注入的 commandExecutor，通过 MatchPlayerHelper 发放装备
+        // 使用 PlayerService 发放装备
         this.playerService.giveInitialGear(player, team);
     }
 
