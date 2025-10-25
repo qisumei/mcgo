@@ -172,6 +172,7 @@ cd mcgo
 - [x] C4掉落优化 - 移除坐标显示、保留距离提示
 - [x] 事件处理优化 - 增强错误处理和日志记录
 - [x] **武器系统重构** - PointBlank 封装、状态管理、简化添加流程
+- [x] **测试基础设施** - JUnit 5 + Mockito，47个单元测试覆盖核心类
 - [ ] 实现GUI商店的购买逻辑
 - [ ] 添加武器图标显示
 - [ ] 添加更多地图预设
@@ -183,6 +184,7 @@ cd mcgo
 - [武器系统详解](docs/WEAPON_SYSTEM_REFACTOR.md) - 技术细节
 - [快速开始](docs/QUICK_START.md) - 开发环境配置
 - [重构计划](docs/REFACTORING_PLAN.md) - 未来改进方向
+- [测试指南](TESTING.md) - 单元测试编写和运行指南
 
 ## 📄 许可证
 
