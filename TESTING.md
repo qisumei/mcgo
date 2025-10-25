@@ -26,14 +26,18 @@
 
 | 类名 | 测试数量 | 预计覆盖率 | 状态 |
 |-----|---------|-----------|------|
-| VirtualMoneyManager | 7 | ~50% | ⚠️ 部分完成 |
+| VirtualMoneyManager | 3 | ~20% | ⚠️ 最小化 |
 | WeaponRegistry | 12 | ~85% | ✅ 完成 |
 | WeaponDefinition | 14 | ~80% | ✅ 完成 |
-| EconomyManager | 6 | ~40% | ⚠️ 部分完成 |
+| EconomyManager | 5 | ~30% | ⚠️ 最小化 |
 
-**总计**: 39个单元测试
+**总计**: 34个单元测试
 
-**注意**: VirtualMoneyManager和EconomyManager的完整测试受限于Minecraft类（ServerPlayer, ItemStack）在测试环境中不可用。这些类需要完整的Minecraft环境进行集成测试。
+**重要限制**: VirtualMoneyManager和EconomyManager的所有方法都涉及Minecraft类（ServerPlayer, ItemStack），这些类在标准测试环境中不可用。当前测试仅覆盖：
+- VirtualMoneyManager: 单例模式和clearAll方法
+- EconomyManager: ServerConfig配置值验证
+
+**完整测试需要**: 在实际Minecraft环境中进行集成测试，以测试所有涉及ServerPlayer和ItemStack的方法。
 
 ### 待测试类 📋
 

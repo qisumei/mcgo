@@ -25,24 +25,16 @@ src/test/java/com/qisumei/csgo/
 ## 已实现的测试
 
 ### 1. VirtualMoneyManagerTest
-**覆盖率目标**: ~50% (受限于ServerPlayer依赖)
+**覆盖率目标**: ~20% (极度受限于Minecraft依赖)
 
 测试内容：
 - ✅ 单例模式验证
-- ✅ 基于UUID的货币查询
 - ✅ clearAll功能
-- ✅ 空值异常处理
-- ✅ 多UUID独立管理
-
-**关键测试**：
-- UUID-based getMoney方法验证
-- 单例一致性测试
-- 空指针防护测试
 
 **限制**：
-- VirtualMoneyManager的大部分方法需要ServerPlayer对象
-- ServerPlayer在测试环境中不可用（需要完整Minecraft环境）
-- 完整功能测试需要在游戏中进行集成测试
+- VirtualMoneyManager的所有方法都需要ServerPlayer对象或涉及相关Minecraft类
+- 即使是UUID版本的getMoney也因为类加载依赖而无法在标准测试环境使用
+- 完整功能测试必须在Minecraft环境中进行
 
 ### 2. WeaponRegistryTest
 **覆盖率目标**: >85%
@@ -77,14 +69,18 @@ src/test/java/com/qisumei/csgo/
 - 特殊武器类型（护甲、手雷）
 
 ### 4. EconomyManagerTest
-**覆盖率目标**: ~40% (受限于Minecraft依赖)
+**覆盖率目标**: ~30% (极度受限于Minecraft依赖)
 
 测试内容：
-- ✅ null参数处理
-- ✅ 配置值验证
+- ✅ ServerConfig配置值验证
 - ✅ 奖励平衡检查
 - ✅ 工具类设计验证
 - ✅ 奖励值范围检查
+
+**限制**：
+- EconomyManager的所有方法都需要ServerPlayer或ItemStack对象
+- getRewardForKill(ItemStack)无法在标准测试环境调用
+- 所有货币操作方法都依赖Minecraft类
 
 **限制**：
 - 部分方法依赖 ServerPlayer 和游戏环境，需要集成测试
