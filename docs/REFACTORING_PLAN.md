@@ -69,15 +69,18 @@ Match.java (核心协调) ~400行
 - ✅ WeaponDefinition (完成 - 14个测试, ~85%覆盖率)
 - ✅ EconomyManager (部分完成 - 基础逻辑测试)
 - ✅ MatchPlayerService (完成 - 2个测试, ~10%覆盖率，极度受Minecraft依赖限制)
-- ⏳ RoundEconomyService (待完成)
-- ⏳ TeamSwapService (待完成)
+- ✅ RoundEconomyService (完成 - 3个测试, ~10%覆盖率，极度受Minecraft依赖限制)
+- ✅ TeamSwapService (完成 - 4个测试, ~10%覆盖率，极度受Minecraft依赖限制)
 
 **已完成工作** (2025-10-25):
 - 建立JUnit 5 + Mockito测试框架
-- 创建49个单元测试（包括2个新的MatchPlayerService测试）
+- 创建56个单元测试（包括7个新的游戏服务测试）
 - 编写测试文档 (src/test/java/README.md)
 - 配置Gradle测试任务
 - 为MatchPlayerService添加构造函数验证和接口实现测试
+- 为RoundEconomyService添加构造函数验证、null检查和方法结构测试
+- 为TeamSwapService添加构造函数验证、null检查和方法结构测试
+- 为RoundEconomyService和TeamSwapService添加构造函数null检查
 
 **预计工作量**: 持续进行
 
@@ -172,6 +175,7 @@ Match.java (核心协调) ~400行
 
 | 日期 | 变更 | 负责人 |
 |------|------|--------|
+| 2025-10-25 | 添加RoundEconomyService和TeamSwapService测试，更新测试统计至56个 | - |
 | 2025-10-25 | 添加MatchPlayerService测试，更新测试统计，新增决策记录 | - |
 | 2025-10-25 | 简化重构计划，整合到架构文档 | - |
 | 2024-10 | 初始版本 | - |

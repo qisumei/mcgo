@@ -15,7 +15,7 @@ public class RoundEconomyService {
     private final EconomyService economyService;
     
     public RoundEconomyService(EconomyService economyService) {
-        this.economyService = economyService;
+        this.economyService = java.util.Objects.requireNonNull(economyService, "economyService cannot be null");
     }
     
     /**

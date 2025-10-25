@@ -18,8 +18,8 @@ public class TeamSwapService {
     private final PlayerService playerService;
     
     public TeamSwapService(ServerCommandExecutor commandExecutor, PlayerService playerService) {
-        this.commandExecutor = commandExecutor;
-        this.playerService = playerService;
+        this.commandExecutor = java.util.Objects.requireNonNull(commandExecutor, "commandExecutor cannot be null");
+        this.playerService = java.util.Objects.requireNonNull(playerService, "playerService cannot be null");
     }
     
     /**
