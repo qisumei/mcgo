@@ -301,21 +301,22 @@ T队开始 -> 随机分配C4 -> 进入包点 -> 安放C4 -> 倒计时40秒
 ## 测试策略
 
 ### 当前状态
-- **单元测试**: ✅ 已建立 (47个测试用例)
+- **单元测试**: ✅ 已建立 (57个测试用例)
   - VirtualMoneyManager: 19个测试, ~95%覆盖率
   - WeaponRegistry: 14个测试, ~90%覆盖率
   - WeaponDefinition: 14个测试, ~85%覆盖率
+  - MatchPlayerService: 10个测试, ~30%覆盖率（受Minecraft依赖限制）
   - EconomyManager: 基础逻辑测试
 - **测试框架**: JUnit 5 + Mockito 5
 - **集成测试**: 手动测试
 
 ### 已完成
-1. ✅ 为核心类添加单元测试（VirtualMoneyManager, WeaponRegistry, WeaponDefinition）
+1. ✅ 为核心类添加单元测试（VirtualMoneyManager, WeaponRegistry, WeaponDefinition, MatchPlayerService）
 2. ✅ 使用 Mock 对象测试 Minecraft 组件
 3. ✅ 创建测试文档和最佳实践指南 (src/test/java/README.md)
 
 ### 待完成
-1. 为 Match, PlayerService 等类添加更多测试
+1. 为 RoundEconomyService, TeamSwapService 等类添加更多测试
 2. 添加回归测试防止功能退化
 3. 提高整体测试覆盖率到 >80%
 
