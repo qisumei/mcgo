@@ -26,15 +26,19 @@
 
 | 类名 | 测试数量 | 预计覆盖率 | 状态 |
 |-----|---------|-----------|------|
-| VirtualMoneyManager | 19 | ~95% | ✅ 完成 |
-| WeaponRegistry | 14 | ~90% | ✅ 完成 |
-| WeaponDefinition | 14 | ~85% | ✅ 完成 |
-| EconomyManager | 基础测试 | ~40% | ⚠️ 部分完成 |
+| VirtualMoneyManager | 7 | ~50% | ⚠️ 部分完成 |
+| WeaponRegistry | 12 | ~85% | ✅ 完成 |
+| WeaponDefinition | 14 | ~80% | ✅ 完成 |
+| EconomyManager | 6 | ~40% | ⚠️ 部分完成 |
+
+**总计**: 39个单元测试
+
+**注意**: VirtualMoneyManager和EconomyManager的完整测试受限于Minecraft类（ServerPlayer, ItemStack）在测试环境中不可用。这些类需要完整的Minecraft环境进行集成测试。
 
 ### 待测试类 📋
 
 - PlayerService 实现类
-- MatchPlayerService
+- MatchPlayerService  
 - RoundEconomyService
 - TeamSwapService
 - WeaponFactory
@@ -43,7 +47,7 @@
 ## 测试框架
 
 - **JUnit 5.10.1**: 主测试框架
-- **Mockito 5.8.0**: Mock框架
+- ~~Mockito 5.8.0~~: 不再使用（Minecraft类在测试环境不可用）
 - **断言**: JUnit Assertions
 
 ## 测试结构

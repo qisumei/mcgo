@@ -7,7 +7,7 @@
 ## 测试框架
 
 - **JUnit 5** (Jupiter) - 主要测试框架
-- **Mockito 5** - Mock框架，用于模拟Minecraft组件
+- ~~Mockito 5~~ - 不再使用（Minecraft类在测试环境不可用）
 
 ## 测试结构
 
@@ -25,21 +25,24 @@ src/test/java/com/qisumei/csgo/
 ## 已实现的测试
 
 ### 1. VirtualMoneyManagerTest
-**覆盖率目标**: >90%
+**覆盖率目标**: ~50% (受限于ServerPlayer依赖)
 
 测试内容：
 - ✅ 单例模式验证
-- ✅ 基本货币操作（获取、设置、增加、扣除）
-- ✅ 边界条件（负数、零、最大值）
-- ✅ 余额不足处理
-- ✅ 清除功能
+- ✅ 基于UUID的货币查询
+- ✅ clearAll功能
 - ✅ 空值异常处理
-- ✅ 线程安全并发测试
+- ✅ 多UUID独立管理
 
 **关键测试**：
-- 并发操作测试确保 ConcurrentHashMap 的线程安全性
-- 货币溢出保护测试（最大值65535）
+- UUID-based getMoney方法验证
+- 单例一致性测试
 - 空指针防护测试
+
+**限制**：
+- VirtualMoneyManager的大部分方法需要ServerPlayer对象
+- ServerPlayer在测试环境中不可用（需要完整Minecraft环境）
+- 完整功能测试需要在游戏中进行集成测试
 
 ### 2. WeaponRegistryTest
 **覆盖率目标**: >85%
@@ -51,7 +54,6 @@ src/test/java/com/qisumei/csgo/
 - ✅ 复合条件查询
 - ✅ 初始化机制
 - ✅ 清空和重新初始化
-- ✅ ID重复处理
 
 **关键测试**：
 - 初始化只执行一次的验证
@@ -75,13 +77,14 @@ src/test/java/com/qisumei/csgo/
 - 特殊武器类型（护甲、手雷）
 
 ### 4. EconomyManagerTest
-**覆盖率目标**: >60% (受限于Minecraft依赖)
+**覆盖率目标**: ~40% (受限于Minecraft依赖)
 
 测试内容：
-- ✅ 奖励计算基本逻辑
+- ✅ null参数处理
 - ✅ 配置值验证
 - ✅ 奖励平衡检查
 - ✅ 工具类设计验证
+- ✅ 奖励值范围检查
 
 **限制**：
 - 部分方法依赖 ServerPlayer 和游戏环境，需要集成测试

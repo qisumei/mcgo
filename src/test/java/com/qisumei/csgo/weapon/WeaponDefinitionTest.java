@@ -48,7 +48,7 @@ class WeaponDefinitionTest {
     void testDefaultAmmoAmount() {
         WeaponDefinition weapon = new WeaponDefinition.Builder("test:ak47", "AK-47", WeaponType.RIFLE)
             .price(27)
-            .defaultAmmo(90)
+            .defaultAmmoAmount(90)
             .bothTeams()
             .build();
         
