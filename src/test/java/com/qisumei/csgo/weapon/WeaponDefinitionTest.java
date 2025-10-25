@@ -187,10 +187,11 @@ class WeaponDefinitionTest {
         WeaponDefinition armor = new WeaponDefinition.Builder("minecraft:iron_chestplate", "护甲", WeaponType.HEAVY)
             .price(10)
             .killReward(0)
+            .defaultAmmoAmount(0)
             .bothTeams()
             .build();
         
-        assertNull(armor.getAmmoType(), "护甲不应该有弹药类型");
+        assertEquals(AmmoType.NONE, armor.getAmmoType(), "护甲的弹药类型应该是NONE");
         assertEquals(0, armor.getDefaultAmmoAmount(), "护甲默认弹药数量应该为0");
     }
 
