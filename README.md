@@ -177,6 +177,13 @@ cd mcgo
 - [ ] 添加更多地图预设
 - [ ] 数据持久化支持
 
+### 开发文档
+- [项目架构](docs/ARCHITECTURE.md) - 完整的系统架构说明
+- [如何添加新武器](docs/HOW_TO_ADD_WEAPONS.md) - 快速指南
+- [武器系统详解](docs/WEAPON_SYSTEM_REFACTOR.md) - 技术细节
+- [快速开始](docs/QUICK_START.md) - 开发环境配置
+- [重构计划](docs/REFACTORING_PLAN.md) - 未来改进方向
+
 ## 📄 许可证
 
 本项目采用 MIT 许可证。详见 [LICENSE](LICENSE) 文件。
@@ -190,29 +197,4 @@ cd mcgo
 ---
 
 **享受在Minecraft中的反恐精英体验！** 🎮
-
-### 🔫 武器系统（新功能）
-
-本项目使用全新重构的武器系统，将 PointBlank 武器进行了封装：
-
-**特点：**
-- 🎯 集中式武器管理 - 所有武器定义在一处
-- 🔒 类型安全 - 使用枚举和强类型
-- 🤖 自动化 - 商店自动处理武器显示和弹药分配
-- ➕ 易于扩展 - 添加新武器只需几行代码
-- 👥 队伍支持 - 内置队伍可用性检查
-
-**添加新武器示例：**
-```java
-register(new WeaponDefinition.Builder("pointblank:scar", "SCAR-H", WeaponType.RIFLE)
-    .price(28)
-    .ammoType(AmmoType.AMMO_762)
-    .addAttachment(WeaponAttachment.ACOG_SCOPE)
-    .bothTeams()
-    .build());
-```
-
-**详细文档：**
-- [如何添加新武器](docs/HOW_TO_ADD_WEAPONS.md) - 快速指南
-- [武器系统重构说明](docs/WEAPON_SYSTEM_REFACTOR.md) - 技术细节
 
