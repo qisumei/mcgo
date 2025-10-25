@@ -6,6 +6,8 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.util.Objects;
+
 /**
  * 回合经济服务 - 处理回合开始时的经济分配逻辑
  * 从 Match.java 中解耦出来，提高代码可维护性
@@ -15,7 +17,7 @@ public class RoundEconomyService {
     private final EconomyService economyService;
     
     public RoundEconomyService(EconomyService economyService) {
-        this.economyService = java.util.Objects.requireNonNull(economyService, "economyService cannot be null");
+        this.economyService = Objects.requireNonNull(economyService, "economyService cannot be null");
     }
     
     /**

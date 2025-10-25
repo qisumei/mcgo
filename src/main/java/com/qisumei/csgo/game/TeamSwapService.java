@@ -6,6 +6,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -18,8 +19,8 @@ public class TeamSwapService {
     private final PlayerService playerService;
     
     public TeamSwapService(ServerCommandExecutor commandExecutor, PlayerService playerService) {
-        this.commandExecutor = java.util.Objects.requireNonNull(commandExecutor, "commandExecutor cannot be null");
-        this.playerService = java.util.Objects.requireNonNull(playerService, "playerService cannot be null");
+        this.commandExecutor = Objects.requireNonNull(commandExecutor, "commandExecutor cannot be null");
+        this.playerService = Objects.requireNonNull(playerService, "playerService cannot be null");
     }
     
     /**
