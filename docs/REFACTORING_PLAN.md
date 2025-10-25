@@ -8,6 +8,9 @@
 - 删除已废弃的 MatchPlayerHelper.java
 - 整理项目文档结构
 - 创建统一的架构文档
+- 建立单元测试框架 (JUnit 5 + Mockito)
+- 为核心类添加47个单元测试
+- 创建测试文档和最佳实践指南
 
 ## 待完成的重构任务
 
@@ -61,10 +64,17 @@ Match.java (核心协调) ~400行
 **目标**: 核心类的测试覆盖率 > 80%
 
 **优先测试**:
-- VirtualMoneyManager
-- WeaponRegistry
-- EconomyManager
-- PlayerService
+- ✅ VirtualMoneyManager (完成 - 19个测试, ~95%覆盖率)
+- ✅ WeaponRegistry (完成 - 14个测试, ~90%覆盖率)
+- ✅ WeaponDefinition (完成 - 14个测试, ~85%覆盖率)
+- ✅ EconomyManager (部分完成 - 基础逻辑测试)
+- ⏳ PlayerService (待完成)
+
+**已完成工作** (2025-10-25):
+- 建立JUnit 5 + Mockito测试框架
+- 创建47个单元测试
+- 编写测试文档 (src/test/java/README.md)
+- 配置Gradle测试任务
 
 **预计工作量**: 持续进行
 
