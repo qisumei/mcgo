@@ -14,13 +14,13 @@
 ```
 src/test/java/com/qisumei/csgo/
 ├── economy/
-│   └── VirtualMoneyManagerTest.java   # 虚拟货币管理器测试
-├── weapon/
-│   ├── WeaponRegistryTest.java        # 武器注册表测试
-│   └── WeaponDefinitionTest.java      # 武器定义测试
-└── game/
-    └── EconomyManagerTest.java         # 经济管理器测试
+│   └── VirtualMoneyManagerTest.java   # 虚拟货币管理器测试 (最小化)
+└── weapon/
+    ├── WeaponRegistryTest.java        # 武器注册表测试
+    └── WeaponDefinitionTest.java      # 武器定义测试
 ```
+
+**注意**: EconomyManagerTest已移除，因为EconomyManager和ServerConfig依赖NeoForge类，即使不调用方法也会在类加载时失败。
 
 ## 已实现的测试
 
@@ -69,22 +69,17 @@ src/test/java/com/qisumei/csgo/
 - 特殊武器类型（护甲、手雷）
 
 ### 4. EconomyManagerTest
-**覆盖率目标**: ~30% (极度受限于Minecraft依赖)
+**状态**: ❌ 已移除
 
-测试内容：
-- ✅ ServerConfig配置值验证
-- ✅ 奖励平衡检查
-- ✅ 工具类设计验证
-- ✅ 奖励值范围检查
+**原因**：
+- EconomyManager和ServerConfig类在加载时就需要NeoForge的ModConfigSpec类
+- 即使不调用任何方法，仅访问类就会触发NoClassDefFoundError
+- ServerConfig的静态初始化块依赖ModConfigSpec.Builder
+- 无法在标准单元测试环境中测试
 
-**限制**：
-- EconomyManager的所有方法都需要ServerPlayer或ItemStack对象
-- getRewardForKill(ItemStack)无法在标准测试环境调用
-- 所有货币操作方法都依赖Minecraft类
-
-**限制**：
-- 部分方法依赖 ServerPlayer 和游戏环境，需要集成测试
-- 通过 VirtualMoneyManagerTest 间接验证包装逻辑
+**测试策略**：
+- 必须在完整Minecraft环境中进行集成测试
+- 或使用专门的Minecraft mod测试框架
 
 ## 运行测试
 

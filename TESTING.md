@@ -29,15 +29,17 @@
 | VirtualMoneyManager | 3 | ~20% | ⚠️ 最小化 |
 | WeaponRegistry | 12 | ~85% | ✅ 完成 |
 | WeaponDefinition | 14 | ~80% | ✅ 完成 |
-| EconomyManager | 5 | ~30% | ⚠️ 最小化 |
 
-**总计**: 34个单元测试
+**总计**: 29个单元测试
 
-**重要限制**: VirtualMoneyManager和EconomyManager的所有方法都涉及Minecraft类（ServerPlayer, ItemStack），这些类在标准测试环境中不可用。当前测试仅覆盖：
-- VirtualMoneyManager: 单例模式和clearAll方法
-- EconomyManager: ServerConfig配置值验证
+**重要限制**: 
+- **VirtualMoneyManager**: 所有方法都涉及Minecraft类，仅测试singleton和clearAll
+- **EconomyManager**: 无法测试 - ServerConfig依赖NeoForge类，运行时会失败
+- **ServerConfig**: 无法测试 - 静态初始化依赖ModConfigSpec
 
-**完整测试需要**: 在实际Minecraft环境中进行集成测试，以测试所有涉及ServerPlayer和ItemStack的方法。
+**可测试的类**: 仅限完全不依赖Minecraft/NeoForge的纯Java类（WeaponRegistry, WeaponDefinition）
+
+**完整测试需要**: 在实际Minecraft环境中进行集成测试。
 
 ### 待测试类 📋
 
@@ -47,6 +49,8 @@
 - TeamSwapService
 - WeaponFactory
 - Match (需先拆分)
+- EconomyManager (需要Minecraft环境)
+- VirtualMoneyManager完整功能 (需要Minecraft环境)
 
 ## 测试框架
 
