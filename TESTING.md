@@ -173,8 +173,8 @@ void testConcurrency() throws InterruptedException {
 
 ## 资源
 
-- [JUnit 5文档](https://junit.org/junit5/docs/current/user-guide/)
-- [Mockito文档](https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html)
+- [JUnit 5文档](https://junit.org/junit5/docs/current/user-guide/) (当前版本: 5.10.1)
+- [Mockito文档](https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html) (当前版本: 5.8.0)
 - [项目测试README](src/test/java/README.md)
 - [重构计划](docs/REFACTORING_PLAN.md)
 
