@@ -68,15 +68,30 @@ Match.java (核心协调) ~400行
 - ✅ WeaponRegistry (完成 - 14个测试, ~90%覆盖率)
 - ✅ WeaponDefinition (完成 - 14个测试, ~85%覆盖率)
 - ✅ EconomyManager (部分完成 - 基础逻辑测试)
-- ⏳ PlayerService (待完成)
+- ✅ MatchPlayerService (完成 - 2个测试, ~10%覆盖率，极度受Minecraft依赖限制)
+- ⏳ RoundEconomyService (待完成)
+- ⏳ TeamSwapService (待完成)
 
 **已完成工作** (2025-10-25):
 - 建立JUnit 5 + Mockito测试框架
-- 创建47个单元测试
+- 创建49个单元测试（包括2个新的MatchPlayerService测试）
 - 编写测试文档 (src/test/java/README.md)
 - 配置Gradle测试任务
+- 为MatchPlayerService添加构造函数验证和接口实现测试
 
 **预计工作量**: 持续进行
+
+**测试最佳实践**:
+- 遵循AAA模式（Arrange-Act-Assert）
+- 使用中文DisplayName提高可读性
+- 测试正常情况、边界值和异常情况
+- 每个测试独立运行，使用@BeforeEach清理状态
+- 避免依赖Minecraft的测试，聚焦纯Java逻辑
+- 需要Minecraft环境的测试应在集成测试中进行
+
+**测试文档**:
+- [测试指南](../TESTING.md) - 如何运行和编写测试
+- [测试README](../src/test/java/README.md) - 详细的测试说明和示例
 
 #### 5. 性能优化
 - 减少 MatchManager.tick() 的开销
@@ -125,16 +140,39 @@ Match.java (核心协调) ~400行
 - 只有一个实现类使用
 - 减少技术债务
 
+### DR-003: 使用手动Mock而非Mockito
+**日期**: 2025-10-25
+**决策**: 测试中使用手动Mock实现，不依赖Mockito框架
+**理由**:
+- Minecraft类在标准测试环境中不可用
+- 即使Mock也无法加载依赖NeoForge的类
+- 手动Mock更轻量、更灵活、更易于理解
+- 测试聚焦于可验证的逻辑（参数验证、接口实现）
+
+### DR-004: 测试策略分层
+**日期**: 2025-10-25
+**决策**: 分层测试策略 - 单元测试（不依赖Minecraft）+ 集成测试（Minecraft环境）
+**理由**:
+- 单元测试快速反馈，覆盖纯Java逻辑
+- 集成测试覆盖完整业务逻辑
+- 明确区分可测试和需要集成测试的部分
+- 避免在无法Mock的场景下浪费时间
+
 ## 参考文档
 
 - [架构文档](ARCHITECTURE.md) - 完整的系统架构说明
+- [测试指南](../TESTING.md) - 如何运行和编写测试
+- [测试详细文档](../src/test/java/README.md) - 测试框架和最佳实践
 - [README.md](../README.md) - 项目概述
 - [CHANGELOG.md](CHANGELOG.md) - 更新历史
+- [武器系统文档](WEAPON_SYSTEM_REFACTOR.md) - 武器系统重构详解
+- [如何添加武器](HOW_TO_ADD_WEAPONS.md) - 添加新武器的快速指南
 
 ## 更新历史
 
 | 日期 | 变更 | 负责人 |
 |------|------|--------|
+| 2025-10-25 | 添加MatchPlayerService测试，更新测试统计，新增决策记录 | - |
 | 2025-10-25 | 简化重构计划，整合到架构文档 | - |
 | 2024-10 | 初始版本 | - |
 

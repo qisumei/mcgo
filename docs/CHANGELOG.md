@@ -1,5 +1,39 @@
 # 更新日志
 
+## [未发布] - 2025-10-25
+
+### 新增功能
+- **单元测试框架**: 建立完整的JUnit 5测试基础设施
+  - 49个单元测试覆盖核心类
+  - WeaponRegistry: 14个测试，~90%覆盖率
+  - WeaponDefinition: 14个测试，~85%覆盖率
+  - MatchPlayerService: 2个测试，~10%覆盖率（极度受Minecraft依赖限制）
+  - VirtualMoneyManager: 3个测试，~20%覆盖率（受Minecraft依赖限制）
+
+### 改进
+- **测试文档**: 
+  - 创建详细的测试指南（`src/test/java/README.md`）
+  - 更新主测试文档（`TESTING.md`）
+  - 添加测试最佳实践和示例
+- **代码质量**:
+  - 为MatchPlayerService添加参数验证测试
+  - 遵循AAA测试模式
+  - 使用中文DisplayName提高可读性
+- **重构计划**:
+  - 更新测试完成状态
+  - 标记已完成和待完成任务
+  - 添加测试覆盖率统计
+
+### 技术改进
+- 采用手动Mock实现，避免Mockito依赖问题
+- 测试聚焦于可在标准Java环境验证的逻辑
+- 详细记录Minecraft依赖限制和集成测试需求
+
+### 文档更新
+- 更新架构文档（`docs/ARCHITECTURE.md`）
+- 更新重构计划（`docs/REFACTORING_PLAN.md`）
+- 完善测试指南和覆盖率信息
+
 ## [未发布] - 2024年
 
 ### 新增功能
