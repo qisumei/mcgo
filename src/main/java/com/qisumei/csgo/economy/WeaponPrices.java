@@ -17,28 +17,28 @@ public class WeaponPrices {
 
     static {
         // 手枪（缩放）
-        LEGACY_PRICES.put("pointblank:glock17", 2);
-        LEGACY_PRICES.put("pointblank:m9", 3);
-        LEGACY_PRICES.put("pointblank:deserteagle", 7);
+        LEGACY_PRICES.put("tacz:glock_17", 2);
+        LEGACY_PRICES.put("tacz:m9", 3);
+        LEGACY_PRICES.put("tacz:deagle", 7);
 
         // 冲锋枪（缩放）
-        LEGACY_PRICES.put("pointblank:mp7", 15);
-        LEGACY_PRICES.put("pointblank:ump45", 12);
-        LEGACY_PRICES.put("pointblank:p90", 23);
-        LEGACY_PRICES.put("pointblank:mp5", 14);
-        LEGACY_PRICES.put("pointblank:vector", 22);
+        LEGACY_PRICES.put("tacz:mp7", 15);
+        LEGACY_PRICES.put("tacz:ump45", 12);
+        LEGACY_PRICES.put("tacz:p90", 23);
+        LEGACY_PRICES.put("tacz:mp5", 14);
+        LEGACY_PRICES.put("tacz:vector", 22);
 
         // 步枪（缩放）
-        LEGACY_PRICES.put("pointblank:ak47", 27);
-        LEGACY_PRICES.put("pointblank:m4a1", 31);
-        LEGACY_PRICES.put("pointblank:aug", 33);
-        LEGACY_PRICES.put("pointblank:a4_sg553", 30);
+        LEGACY_PRICES.put("tacz:ak47", 27);
+        LEGACY_PRICES.put("tacz:m4a1", 31);
+        LEGACY_PRICES.put("tacz:aug", 33);
+        LEGACY_PRICES.put("tacz:sg552", 30);
 
         // 狙击
-        LEGACY_PRICES.put("pointblank:l96a1", 47);
+        LEGACY_PRICES.put("tacz:awp", 47);
 
         // 投掷物
-        LEGACY_PRICES.put("pointblank:grenade", 3);
+        LEGACY_PRICES.put("tacz:frag_grenade", 3);
 
         // 护甲与工具（缩放）
         LEGACY_PRICES.put("minecraft:leather_chestplate", 3);

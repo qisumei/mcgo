@@ -244,12 +244,12 @@ public class ServerConfig {
         // 武器类别映射配置项
         BUILDER.push("Weapon Categories");
         WEAPONS_KNIFE_SPEC = BUILDER.comment("被视为'刀'的物品ID列表").defineList("knifes", List.of("minecraft:iron_sword", "minecraft:netherite_sword"), obj -> obj instanceof String);
-        WEAPONS_PISTOL_SPEC = BUILDER.comment("被视为'手枪'的物品ID列表").defineList("pistols", List.of("pointblank:a1_hkusp45", "pointblank:a1_g17", "pointblank:deserteagle"), obj -> obj instanceof String);
-        WEAPONS_SMG_SPEC = BUILDER.comment("被视为'冲锋枪'的物品ID列表").defineList("smgs", List.of("pointblank:mp7", "pointblank:p90", "pointblank:a2_pp19b"), obj -> obj instanceof String);
-        WEAPONS_HEAVY_SPEC = BUILDER.comment("被视为'重型武器'的物品ID列表").defineList("heavies", List.of("pointblank:m590", "pointblank:m1014", "pointblank:m249"), obj -> obj instanceof String);
-        WEAPONS_RIFLE_SPEC = BUILDER.comment("被视为'步枪'的物品ID列表").defineList("rifles", List.of("pointblank:m4a1", "pointblank:aug", "pointblank:ak47", "pointblank:a4_sg553"), obj -> obj instanceof String);
-        WEAPONS_AWP_SPEC = BUILDER.comment("被视为'AWP'的物品ID列表").defineList("awps", List.of("pointblank:l96a1", "pointblank:a8_l96"), obj -> obj instanceof String);
-        WEAPONS_GRENADE_SPEC = BUILDER.comment("被视为'投掷物'的物品ID列表").defineList("grenades", List.of("pointblank:grenade"), obj -> obj instanceof String);
+        WEAPONS_PISTOL_SPEC = BUILDER.comment("被视为'手枪'的物品ID列表").defineList("pistols", List.of("tacz:glock_17", "tacz:m9", "tacz:deagle"), obj -> obj instanceof String);
+        WEAPONS_SMG_SPEC = BUILDER.comment("被视为'冲锋枪'的物品ID列表").defineList("smgs", List.of("tacz:mp7", "tacz:p90", "tacz:mp5", "tacz:ump45", "tacz:vector"), obj -> obj instanceof String);
+        WEAPONS_HEAVY_SPEC = BUILDER.comment("被视为'重型武器'的物品ID列表").defineList("heavies", List.of(), obj -> obj instanceof String);
+        WEAPONS_RIFLE_SPEC = BUILDER.comment("被视为'步枪'的物品ID列表").defineList("rifles", List.of("tacz:m4a1", "tacz:aug", "tacz:ak47", "tacz:sg552"), obj -> obj instanceof String);
+        WEAPONS_AWP_SPEC = BUILDER.comment("被视为'AWP'的物品ID列表").defineList("awps", List.of("tacz:awp"), obj -> obj instanceof String);
+        WEAPONS_GRENADE_SPEC = BUILDER.comment("被视为'投掷物'的物品ID列表").defineList("grenades", List.of("tacz:frag_grenade"), obj -> obj instanceof String);
         BUILDER.pop();
 
         SPEC = BUILDER.build();

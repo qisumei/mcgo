@@ -6,10 +6,10 @@ import java.util.Optional;
 
 /**
  * 武器定义类 - 封装武器的所有属性和行为
- * 这个类作为 PointBlank 武器系统的抽象层，使得添加新武器更加简单
+ * 这个类作为 TaCZ 武器系统的抽象层，使得添加新武器更加简单
  */
 public class WeaponDefinition {
-    private final String weaponId;           // 武器的物品ID（如 "pointblank:ak47"）
+    private final String weaponId;           // 武器的物品ID（如 "tacz:ak47"）
     private final String displayName;        // 显示名称
     private final WeaponType type;           // 武器类型
     private final int price;                 // 价格

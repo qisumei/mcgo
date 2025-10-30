@@ -2,7 +2,7 @@
 
 ## 概述
 
-本次重构为 MCGO 项目创建了一个新的武器系统抽象层，将 PointBlank 模组的武器进行封装，使得添加新武器到商店变得更加简单和一致。
+本次重构为 MCGO 项目创建了一个新的武器系统抽象层，将 TaCZ 模组的武器进行封装，使得添加新武器到商店变得更加简单和一致。
 
 ## 核心组件
 
@@ -21,7 +21,7 @@
 
 ### 2. 弹药类型 (AmmoType)
 
-定义了所有弹药类型及其对应的 PointBlank 物品ID：
+定义了所有弹药类型及其对应的 TaCZ 物品ID：
 - `AMMO_9MM` - 9mm弹药
 - `AMMO_45ACP` - .45 ACP弹药
 - `AMMO_50AE` - .50 AE弹药
@@ -47,7 +47,7 @@
 ### 4. 武器定义 (WeaponDefinition)
 
 封装了武器的所有属性：
-- 武器ID（PointBlank 物品ID）
+- 武器ID（TaCZ 物品ID）
 - 显示名称
 - 武器类型
 - 价格
@@ -254,21 +254,21 @@ addShopItem(slot++, "pointblank:ak47", "AK-47", 27);
 ### 新代码：
 ```java
 // 使用武器定义
-WeaponDefinition weapon = WeaponRegistry.getWeapon("pointblank:ak47").orElseThrow();
+WeaponDefinition weapon = WeaponRegistry.getWeapon("tacz:ak47").orElseThrow();
 addShopItemFromWeapon(slot++, weapon);
 ```
 
 ### 获取价格：
 ```java
 // 旧方式（仍然支持）
-int price = WeaponPrices.getPrice("pointblank:ak47");
+int price = WeaponPrices.getPrice("tacz:ak47");
 
 // 新方式（推荐）
-int price = WeaponRegistry.getWeapon("pointblank:ak47")
+int price = WeaponRegistry.getWeapon("tacz:ak47")
     .map(WeaponDefinition::getPrice)
     .orElse(0);
 ```
 
 ## 总结
 
-新的武器系统提供了一个清晰、类型安全、易于扩展的架构，将 PointBlank 武器系统很好地封装起来，同时保持了向后兼容性。添加新武器现在只需要在注册表中添加几行代码，系统会自动处理其余的事情。
+新的武器系统提供了一个清晰、类型安全、易于扩展的架构，将 TaCZ 武器系统很好地封装起来，同时保持了向后兼容性。添加新武器现在只需要在注册表中添加几行代码，系统会自动处理其余的事情。

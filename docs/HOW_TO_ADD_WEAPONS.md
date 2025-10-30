@@ -4,7 +4,7 @@
 
 ## 快速开始
 
-添加新武器只需要3步：
+添加新武器只需要3步:
 
 ### 1. 打开 WeaponRegistry.java
 
@@ -25,7 +25,7 @@
 
 ```java
 register(new WeaponDefinition.Builder(
-    "pointblank:weapon_id",  // PointBlank 武器的物品ID
+    "tacz:weapon_id",       // TaCZ 武器的物品ID
     "武器显示名称",           // 在商店中显示的名称
     WeaponType.RIFLE        // 武器类型
 )
@@ -45,9 +45,9 @@ register(new WeaponDefinition.Builder(
 private static void registerPistols() {
     // ... 现有武器 ...
     
-    // 添加 CZ75-Auto
-    register(new WeaponDefinition.Builder("pointblank:cz75", "CZ75-Auto", WeaponType.PISTOL)
-        .price(5)
+    // 添加 P250
+    register(new WeaponDefinition.Builder("tacz:p250", "P250", WeaponType.PISTOL)
+        .price(3)
         .killReward(3)
         .ammoType(AmmoType.AMMO_9MM)
         .bothTeams()
@@ -62,7 +62,7 @@ private static void registerRifles() {
     // ... 现有武器 ...
     
     // 添加 FAMAS（仅CT可用）
-    register(new WeaponDefinition.Builder("pointblank:famas", "FAMAS", WeaponType.RIFLE)
+    register(new WeaponDefinition.Builder("tacz:famas", "FAMAS", WeaponType.RIFLE)
         .price(22)
         .killReward(3)
         .ammoType(AmmoType.AMMO_556)
@@ -79,7 +79,7 @@ private static void registerRifles() {
     // ... 现有武器 ...
     
     // 添加 Galil AR（仅T可用）
-    register(new WeaponDefinition.Builder("pointblank:galil", "Galil AR", WeaponType.RIFLE)
+    register(new WeaponDefinition.Builder("tacz:galil", "Galil AR", WeaponType.RIFLE)
         .price(20)
         .killReward(3)
         .ammoType(AmmoType.AMMO_556)
@@ -95,13 +95,13 @@ private static void registerRifles() {
 private static void registerSnipers() {
     // ... 现有武器 ...
     
-    // 添加 SCAR-20
-    register(new WeaponDefinition.Builder("pointblank:scar20", "SCAR-20", WeaponType.SNIPER)
-        .price(50)
+    // 添加 SSG 08
+    register(new WeaponDefinition.Builder("tacz:ssg08", "SSG 08", WeaponType.SNIPER)
+        .price(17)
         .killReward(1)
         .ammoType(AmmoType.AMMO_762)
         .addAttachment(WeaponAttachment.SCOPE_8X)
-        .ctOnly()
+        .bothTeams()
         .build());
 }
 ```
@@ -112,7 +112,7 @@ private static void registerSnipers() {
 
 | 属性 | 说明 | 示例 |
 |------|------|------|
-| 武器ID | PointBlank 模组中的物品ID | `"pointblank:ak47"` |
+| 武器ID | TaCZ 模组中的物品ID | `"tacz:ak47"` |
 | 显示名称 | 在商店中显示的名称 | `"AK-47"` |
 | 武器类型 | 武器的分类 | `WeaponType.RIFLE` |
 
@@ -135,9 +135,9 @@ AmmoType.AMMO_45ACP     // .45 ACP - 用于 UMP-45, Vector
 AmmoType.AMMO_50AE      // .50 AE - 用于沙漠之鹰
 AmmoType.AMMO_46        // 4.6mm - 用于 MP7
 AmmoType.AMMO_57        // 5.7mm - 用于 P90
-AmmoType.AMMO_556       // 5.56mm - 用于 M4A1, AUG, SG 553
+AmmoType.AMMO_556       // 5.56mm - 用于 M4A1, AUG, SG 552
 AmmoType.AMMO_762       // 7.62mm - 用于 AK-47
-AmmoType.AMMO_338       // .338 Lapua - 用于 L96A1
+AmmoType.AMMO_338       // .338 Lapua - 用于 AWP
 AmmoType.NONE           // 无弹药 - 用于近战和投掷物
 ```
 
@@ -187,9 +187,9 @@ WeaponAttachment.SCOPE_8X     // 8倍镜 - 用于狙击枪
 
 ## 常见问题
 
-### Q: 如何找到 PointBlank 武器的物品ID？
+### Q: 如何找到 TaCZ 武器的物品ID？
 
-A: 在游戏中使用 F3+H 显示高级工具提示，将鼠标悬停在物品上即可看到其ID。或者查看 PointBlank 模组的源代码。
+A: 在游戏中使用 F3+H 显示高级工具提示，将鼠标悬停在物品上即可看到其ID。或者查看 TaCZ 模组的源代码和配置文件。
 
 ### Q: 我的武器没有在商店中显示？
 

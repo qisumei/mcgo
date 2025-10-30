@@ -82,12 +82,12 @@ P键                    # 在购买阶段打开商店GUI（显示当前余额）
 ### 前置要求
 - **Minecraft** 1.21+
 - **NeoForge** 21.0.x+
-- **PointBlank** 模组（提供武器系统）
+- **TaCZ** 模组（提供武器系统）
 
 ### 安装步骤
 1. 下载最新版本的 `qiscsgo-1.0.0.jar`
 2. 将jar文件放入 `mods` 文件夹
-3. 确保已安装PointBlank模组（武器依赖）
+3. 确保已安装TaCZ模组（武器依赖）
 4. 启动游戏
 
 ## ⚙️ 配置文件
@@ -171,11 +171,11 @@ cd mcgo
 - [x] 移除余额命令 - 商店界面集成余额显示
 - [x] C4掉落优化 - 移除坐标显示、保留距离提示
 - [x] 事件处理优化 - 增强错误处理和日志记录
-- [x] **武器系统重构** - PointBlank 封装、状态管理、简化添加流程
 - [x] **测试基础设施** - JUnit 5测试框架，49个单元测试覆盖核心类
   - WeaponRegistry/WeaponDefinition: ~85-90%覆盖率
   - MatchPlayerService: 构造函数验证和接口实现测试
   - VirtualMoneyManager: 基础功能测试
+- [x] **武器系统迁移** - 从 PointBlank 迁移到 TaCZ 模组
 - [ ] 完善集成测试 - 在Minecraft环境中测试完整业务逻辑
 - [ ] 实现GUI商店的购买逻辑
 - [ ] 添加武器图标显示
@@ -227,7 +227,7 @@ open build/reports/tests/test/index.html
 ## 🔗 相关链接
 
 - [NeoForge官网](https://neoforged.net/)
-- [PointBlank模组](https://github.com/Toma1O6/PointBlank)
+- [TaCZ模组](https://github.com/bitzlay/TACZ)
 - [问题反馈](../../issues)
 
 ---
