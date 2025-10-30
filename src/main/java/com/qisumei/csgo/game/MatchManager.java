@@ -38,7 +38,6 @@ public class MatchManager {
      * @param server 当前的Minecraft服务器实例
      * @return 如果成功创建则返回true，如果已存在同名比赛则返回false
      */
-    // --- 修正 #2: createMatch 需要 server 参数来创建 Match ---
     public static boolean createMatch(String name, int maxPlayers, MinecraftServer server) {
         if (ACTIVE_MATCHES.containsKey(name)) {
             return false;
@@ -99,7 +98,6 @@ public class MatchManager {
 
     /**
      * 移除指定名称的比赛。
-     *
      * 首先尝试通过 ServiceRegistry 获取注册的 MatchService 并让其处理删除（允许替代实现），
      * 若未注册则回退到移除静态存储的实现以保证兼容性。
      *

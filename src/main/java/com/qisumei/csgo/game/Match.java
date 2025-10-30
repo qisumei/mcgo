@@ -523,8 +523,6 @@ public class Match implements MatchContext {
             player.setHealth(player.getMaxHealth());
             player.getFoodData().setFoodLevel(20);
             player.removeAllEffects();
-            
-            // 回合开始时确保玩家可见
             player.setInvisible(false);
             
             player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, ServerConfig.buyPhaseSeconds * 20, 4, false, false, true));
