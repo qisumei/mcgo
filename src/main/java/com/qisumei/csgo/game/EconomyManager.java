@@ -13,7 +13,6 @@ import java.util.Objects;
 /**
  * 经济系统管理类 - 使用虚拟货币系统。
  * 不再使用钻石，改用内存中的虚拟货币。
- * 
  * 注意：这个类主要用于向后兼容，新代码应该使用 EconomyService 接口。
  */
 public final class EconomyManager {
@@ -21,7 +20,6 @@ public final class EconomyManager {
     private EconomyManager() {
         // 私有构造函数防止实例化
     }
-
     /**
      * 向指定玩家发放一定数量的游戏货币（虚拟货币）。
      * @param player 玩家对象（不能为 null）
@@ -42,7 +40,6 @@ public final class EconomyManager {
             true
         );
     }
-
     /**
      * 扣除玩家货币。
      * @param player 玩家对象（不能为 null）
