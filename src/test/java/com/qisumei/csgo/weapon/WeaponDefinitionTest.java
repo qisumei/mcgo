@@ -198,7 +198,7 @@ class WeaponDefinitionTest {
     @Test
     @DisplayName("应该能创建手雷类型武器")
     void testGrenadeWeapon() {
-        WeaponDefinition grenade = new WeaponDefinition.Builder("pointblank:grenade", "手雷", WeaponType.GRENADE)
+        WeaponDefinition grenade = new WeaponDefinition.Builder("tacz:frag_grenade", "手雷", WeaponType.GRENADE)
             .price(3)
             .killReward(3)
             .bothTeams()

@@ -2,7 +2,7 @@
 
 ## 概述
 
-本次重构为 MCGO 项目创建了一个新的武器系统抽象层，将 PointBlank 模组的武器进行封装，使得添加新武器到商店变得更加简单和一致。
+本次重构为 MCGO 项目创建了一个新的武器系统抽象层，将 TaCZ 模组的武器进行封装，使得添加新武器到商店变得更加简单和一致。
 
 ## 核心组件
 
@@ -21,7 +21,7 @@
 
 ### 2. 弹药类型 (AmmoType)
 
-定义了所有弹药类型及其对应的 PointBlank 物品ID：
+定义了所有弹药类型及其对应的 TaCZ 物品ID：
 - `AMMO_9MM` - 9mm弹药
 - `AMMO_45ACP` - .45 ACP弹药
 - `AMMO_50AE` - .50 AE弹药
@@ -47,7 +47,7 @@
 ### 4. 武器定义 (WeaponDefinition)
 
 封装了武器的所有属性：
-- 武器ID（PointBlank 物品ID）
+- 武器ID（TaCZ 物品ID）
 - 显示名称
 - 武器类型
 - 价格
@@ -60,7 +60,7 @@
 使用 Builder 模式创建：
 
 ```java
-WeaponDefinition ak47 = new WeaponDefinition.Builder("pointblank:ak47", "AK-47", WeaponType.RIFLE)
+WeaponDefinition ak47 = new WeaponDefinition.Builder("tacz:ak47", "AK-47", WeaponType.RIFLE)
     .price(27)
     .killReward(3)
     .ammoType(AmmoType.AMMO_762)
@@ -94,7 +94,7 @@ ItemStack ammo = WeaponFactory.createAmmo(AmmoType.AMMO_762, 64);
 WeaponRegistry.initialize();
 
 // 查询武器
-Optional<WeaponDefinition> weapon = WeaponRegistry.getWeapon("pointblank:ak47");
+Optional<WeaponDefinition> weapon = WeaponRegistry.getWeapon("tacz:ak47");
 
 // 查询特定类型的武器
 List<WeaponDefinition> rifles = WeaponRegistry.getWeaponsByType(WeaponType.RIFLE);
@@ -127,7 +127,7 @@ private static void registerRifles() {
     // 现有武器...
     
     // 添加新武器
-    register(new WeaponDefinition.Builder("pointblank:scar", "SCAR-H", WeaponType.RIFLE)
+    register(new WeaponDefinition.Builder("tacz:scar", "SCAR-H", WeaponType.RIFLE)
         .price(28)
         .killReward(3)
         .ammoType(AmmoType.AMMO_762)
@@ -204,24 +204,24 @@ WeaponRegistry.register(customWeapon);
 ```java
 // 1. 定义新的弹药类型（如果需要）
 // 在 AmmoType.java 中添加：
-AMMO_9X39("pointblank:ammo9x39", "9x39mm")
+AMMO_9X39("tacz:ammo/9x39mm", "9x39mm")
 
 // 2. 定义新的附件（如果需要）
 // 在 WeaponAttachment.java 中添加：
-public static final WeaponAttachment RED_DOT = new WeaponAttachment(
-    "pointblank:reddot", "红点瞄具", AttachmentType.SCOPE
+public static final WeaponAttachment SCOPE_HOLO = new WeaponAttachment(
+    "tacz:attachment/scope_holo", "全息瞄具", AttachmentType.SCOPE
 );
 
 // 3. 在 WeaponRegistry 中注册武器
 private static void registerRifles() {
     // ... 其他武器
     
-    register(new WeaponDefinition.Builder("pointblank:as_val", "AS Val", WeaponType.RIFLE)
+    register(new WeaponDefinition.Builder("tacz:as_val", "AS Val", WeaponType.RIFLE)
         .price(29)
         .killReward(3)
         .ammoType(AmmoType.AMMO_9X39)
         .defaultAmmoAmount(60)
-        .addAttachment(WeaponAttachment.RED_DOT)
+        .addAttachment(WeaponAttachment.SCOPE_HOLO)
         .tOnly()  // 仅T队可用
         .build());
 }
@@ -248,27 +248,27 @@ private static void registerRifles() {
 ### 旧代码：
 ```java
 // 直接使用物品ID
-addShopItem(slot++, "pointblank:ak47", "AK-47", 27);
+addShopItem(slot++, "tacz:ak47", "AK-47", 27);
 ```
 
 ### 新代码：
 ```java
 // 使用武器定义
-WeaponDefinition weapon = WeaponRegistry.getWeapon("pointblank:ak47").orElseThrow();
+WeaponDefinition weapon = WeaponRegistry.getWeapon("tacz:ak47").orElseThrow();
 addShopItemFromWeapon(slot++, weapon);
 ```
 
 ### 获取价格：
 ```java
 // 旧方式（仍然支持）
-int price = WeaponPrices.getPrice("pointblank:ak47");
+int price = WeaponPrices.getPrice("tacz:ak47");
 
 // 新方式（推荐）
-int price = WeaponRegistry.getWeapon("pointblank:ak47")
+int price = WeaponRegistry.getWeapon("tacz:ak47")
     .map(WeaponDefinition::getPrice)
     .orElse(0);
 ```
 
 ## 总结
 
-新的武器系统提供了一个清晰、类型安全、易于扩展的架构，将 PointBlank 武器系统很好地封装起来，同时保持了向后兼容性。添加新武器现在只需要在注册表中添加几行代码，系统会自动处理其余的事情。
+新的武器系统提供了一个清晰、类型安全、易于扩展的架构，将 TaCZ 武器系统很好地封装起来，同时保持了向后兼容性。添加新武器现在只需要在注册表中添加几行代码，系统会自动处理其余的事情。

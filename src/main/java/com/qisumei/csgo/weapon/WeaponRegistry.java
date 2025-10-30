@@ -90,21 +90,21 @@ public class WeaponRegistry {
      * 注册手枪
      */
     private static void registerPistols() {
-        register(new WeaponDefinition.Builder("pointblank:glock17", "Glock-17", WeaponType.PISTOL)
+        register(new WeaponDefinition.Builder("tacz:glock_17", "Glock-17", WeaponType.PISTOL)
             .price(2)
             .killReward(3)
             .ammoType(AmmoType.AMMO_9MM)
             .bothTeams()
             .build());
 
-        register(new WeaponDefinition.Builder("pointblank:m9", "M9", WeaponType.PISTOL)
+        register(new WeaponDefinition.Builder("tacz:m9", "M9", WeaponType.PISTOL)
             .price(3)
             .killReward(3)
             .ammoType(AmmoType.AMMO_9MM)
             .bothTeams()
             .build());
 
-        register(new WeaponDefinition.Builder("pointblank:deserteagle", "沙漠之鹰", WeaponType.PISTOL)
+        register(new WeaponDefinition.Builder("tacz:deagle", "沙漠之鹰", WeaponType.PISTOL)
             .price(7)
             .killReward(3)
             .ammoType(AmmoType.AMMO_50AE)
@@ -116,35 +116,35 @@ public class WeaponRegistry {
      * 注册冲锋枪
      */
     private static void registerSmgs() {
-        register(new WeaponDefinition.Builder("pointblank:mp7", "MP7", WeaponType.SMG)
+        register(new WeaponDefinition.Builder("tacz:mp7", "MP7", WeaponType.SMG)
             .price(15)
             .killReward(6)
             .ammoType(AmmoType.AMMO_46)
             .bothTeams()
             .build());
 
-        register(new WeaponDefinition.Builder("pointblank:ump45", "UMP-45", WeaponType.SMG)
+        register(new WeaponDefinition.Builder("tacz:ump45", "UMP-45", WeaponType.SMG)
             .price(12)
             .killReward(6)
             .ammoType(AmmoType.AMMO_45ACP)
             .bothTeams()
             .build());
 
-        register(new WeaponDefinition.Builder("pointblank:p90", "P90", WeaponType.SMG)
+        register(new WeaponDefinition.Builder("tacz:p90", "P90", WeaponType.SMG)
             .price(23)
             .killReward(6)
             .ammoType(AmmoType.AMMO_57)
             .bothTeams()
             .build());
 
-        register(new WeaponDefinition.Builder("pointblank:mp5", "MP5", WeaponType.SMG)
+        register(new WeaponDefinition.Builder("tacz:mp5", "MP5", WeaponType.SMG)
             .price(14)
             .killReward(6)
             .ammoType(AmmoType.AMMO_9MM)
             .bothTeams()
             .build());
 
-        register(new WeaponDefinition.Builder("pointblank:vector", "Vector", WeaponType.SMG)
+        register(new WeaponDefinition.Builder("tacz:vector", "Vector", WeaponType.SMG)
             .price(22)
             .killReward(6)
             .ammoType(AmmoType.AMMO_45ACP)
@@ -156,7 +156,7 @@ public class WeaponRegistry {
      * 注册步枪
      */
     private static void registerRifles() {
-        register(new WeaponDefinition.Builder("pointblank:ak47", "AK-47", WeaponType.RIFLE)
+        register(new WeaponDefinition.Builder("tacz:ak47", "AK-47", WeaponType.RIFLE)
             .price(27)
             .killReward(3)
             .ammoType(AmmoType.AMMO_762)
@@ -164,7 +164,7 @@ public class WeaponRegistry {
             .bothTeams()
             .build());
 
-        register(new WeaponDefinition.Builder("pointblank:m4a1", "M4A1", WeaponType.RIFLE)
+        register(new WeaponDefinition.Builder("tacz:m4a1", "M4A1", WeaponType.RIFLE)
             .price(31)
             .killReward(3)
             .ammoType(AmmoType.AMMO_556)
@@ -172,7 +172,7 @@ public class WeaponRegistry {
             .bothTeams()
             .build());
 
-        register(new WeaponDefinition.Builder("pointblank:aug", "AUG", WeaponType.RIFLE)
+        register(new WeaponDefinition.Builder("tacz:aug", "AUG", WeaponType.RIFLE)
             .price(33)
             .killReward(3)
             .ammoType(AmmoType.AMMO_556)
@@ -180,7 +180,7 @@ public class WeaponRegistry {
             .bothTeams()
             .build());
 
-        register(new WeaponDefinition.Builder("pointblank:a4_sg553", "SG 553", WeaponType.RIFLE)
+        register(new WeaponDefinition.Builder("tacz:sg552", "SG 552", WeaponType.RIFLE)
             .price(30)
             .killReward(3)
             .ammoType(AmmoType.AMMO_556)
@@ -193,7 +193,7 @@ public class WeaponRegistry {
      * 注册狙击枪
      */
     private static void registerSnipers() {
-        register(new WeaponDefinition.Builder("pointblank:l96a1", "L96A1", WeaponType.SNIPER)
+        register(new WeaponDefinition.Builder("tacz:awp", "AWP", WeaponType.SNIPER)
             .price(47)
             .killReward(1)
             .ammoType(AmmoType.AMMO_338)
@@ -206,12 +206,12 @@ public class WeaponRegistry {
      * 注册投掷物
      */
     private static void registerGrenades() {
-        register(new WeaponDefinition.Builder("pointblank:grenade", "手雷", WeaponType.GRENADE)
+        register(new WeaponDefinition.Builder("tacz:frag_grenade", "手雷", WeaponType.GRENADE)
             .price(3)
             .killReward(3)
             .bothTeams()
             .build());
-        register(new WeaponDefinition.Builder("qiscsgo.smoke_grenade", "烟雾弹", WeaponType.GRENADE)
+        register(new WeaponDefinition.Builder("qiscsgo:smoke_grenade", "烟雾弹", WeaponType.GRENADE)
             .price(3)
             .killReward(0)
             .bothTeams()

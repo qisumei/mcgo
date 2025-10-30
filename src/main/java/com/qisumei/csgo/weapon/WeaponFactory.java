@@ -12,7 +12,7 @@ import net.minecraft.world.item.component.CustomData;
 
 /**
  * 武器工厂类 - 负责根据武器定义创建实际的 Minecraft 物品
- * 这个类封装了 PointBlank 武器的创建逻辑
+ * 这个类封装了 TaCZ 武器的创建逻辑
  */
 public class WeaponFactory {
 
@@ -71,8 +71,8 @@ public class WeaponFactory {
             CustomData customData = weapon.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY);
             CompoundTag tag = customData.copyTag();
             
-            // 获取或创建附件标签
-            CompoundTag attachmentsTag = tag.getCompound("pointblank:attachments");
+            // 获取或创建附件标签 (TaCZ uses a different structure)
+            CompoundTag attachmentsTag = tag.getCompound("tacz:attachments");
             
             // 添加所有默认附件
             for (WeaponAttachment attachment : definition.getDefaultAttachments()) {
@@ -81,7 +81,7 @@ public class WeaponFactory {
             }
             
             // 将附件标签放回主标签
-            tag.put("pointblank:attachments", attachmentsTag);
+            tag.put("tacz:attachments", attachmentsTag);
             
             // 更新武器的自定义数据
             weapon.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));

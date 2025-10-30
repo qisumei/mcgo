@@ -49,10 +49,10 @@ public class WeaponAttachment {
 
     // 预定义的常用附件
     public static final WeaponAttachment ACOG_SCOPE = new WeaponAttachment(
-        "pointblank:acog", "ACOG瞄准镜", AttachmentType.SCOPE
+        "tacz:attachment/scope_acog", "ACOG瞄准镜", AttachmentType.SCOPE
     );
 
     public static final WeaponAttachment SCOPE_8X = new WeaponAttachment(
-        "pointblank:scope_x8", "8倍镜", AttachmentType.SCOPE
+        "tacz:attachment/scope_8x", "8倍镜", AttachmentType.SCOPE
     );
 }
