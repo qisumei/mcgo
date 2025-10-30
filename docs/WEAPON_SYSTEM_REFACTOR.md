@@ -204,12 +204,12 @@ WeaponRegistry.register(customWeapon);
 ```java
 // 1. 定义新的弹药类型（如果需要）
 // 在 AmmoType.java 中添加：
-AMMO_9X39("tacz:ammo/9x39", "9x39mm")
+AMMO_9X39("tacz:ammo/9x39mm", "9x39mm")
 
 // 2. 定义新的附件（如果需要）
 // 在 WeaponAttachment.java 中添加：
-public static final WeaponAttachment HOLO_SIGHT = new WeaponAttachment(
-    "tacz:attachment/holo_sight", "全息瞄具", AttachmentType.SCOPE
+public static final WeaponAttachment SCOPE_HOLO = new WeaponAttachment(
+    "tacz:attachment/scope_holo", "全息瞄具", AttachmentType.SCOPE
 );
 
 // 3. 在 WeaponRegistry 中注册武器
@@ -221,7 +221,7 @@ private static void registerRifles() {
         .killReward(3)
         .ammoType(AmmoType.AMMO_9X39)
         .defaultAmmoAmount(60)
-        .addAttachment(WeaponAttachment.HOLO_SIGHT)
+        .addAttachment(WeaponAttachment.SCOPE_HOLO)
         .tOnly()  // 仅T队可用
         .build());
 }
