@@ -49,7 +49,7 @@ public class WeaponPrices {
      * 获取物品价格
      * 优先从 WeaponRegistry 获取，回退到旧的价格映射
      * 
-     * @param itemId 物品ID（如 "pointblank:ak47"）
+     * @param itemId 物品ID（如 "tacz:ak47"）
      * @return 价格，如果未定义则返回0
      */
     public static int getPrice(String itemId) {

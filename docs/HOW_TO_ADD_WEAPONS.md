@@ -255,7 +255,7 @@ List<WeaponDefinition> rifles = WeaponRegistry.getWeaponsByType(WeaponType.RIFLE
 List<WeaponDefinition> ctWeapons = WeaponRegistry.getWeaponsForTeam("CT");
 
 // 检查武器是否已注册
-boolean exists = WeaponRegistry.isRegistered("pointblank:ak47");
+boolean exists = WeaponRegistry.isRegistered("tacz:ak47");
 ```
 
 ## 贡献
